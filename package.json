@@ -2,10 +2,10 @@
   "name": "whosturn",
   "version": "1.0.0",
   "description": "Turn tracker for me and my climbing friends",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "node server.js",
+    "dev": "nodemon server.js"
   },
   "keywords": [],
   "author": "",
