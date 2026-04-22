@@ -1,0 +1,19 @@
+Technical:
+- Use HTML, CSS, Bootstrap 5 and JavaScript
+- Framework node?
+- Try to use SQLite instead of setting up whole db
+
+Use case:
+I have a group of friends I go climbing with once a week. We take turns driving and paying for drinks. Not everyone is in the carpool but everyone is joining drinks.
+I want to keep track of who's turn it is to drive or pay.
+
+Nice to have:
+I want to be able to mark if someone is absent.
+When the active person is absent, change the schedule.
+Come up with the most fair way of changing payment schedule in someone's absence (they aren't paid for that week if someone else is paying)
+
+Educational aspects:
+- Claude provide tickets with instructions, code snippets and explanation.
+- Edit code myself.
+
+
