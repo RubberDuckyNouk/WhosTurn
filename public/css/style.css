@@ -1,0 +1,28 @@
+body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+main {
+    flex: 1;
+}
+
+footer {
+    background-color: #212326;
+    color: #dddddd;
+    text-align: center;
+    padding: 1.5rem 0;
+}
+
+    /* Footer social links */
+    footer a {
+        color: #dddddd;
+        transition: opacity 0.2s;
+        text-decoration: none;
+    }
+
+        footer a:hover {
+            opacity: 0.8;
+            text-decoration: none;
+        }
