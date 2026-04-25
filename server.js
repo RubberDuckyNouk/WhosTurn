@@ -63,3 +63,25 @@ app.get("/api/driving", async (req, res) => {
     }
 });
 
+// Get payment rotation (per group)
+app.get("/api/payment", async (req, res) => {
+    try {
+        const result = await pool.query(
+            "SELECT * FROM members WHERE pay_group IS NOT NULL ORDER BY pay_group, pay_order"
+        );
+
+        // Group members by pay_group
+        const groups = {};
+        result.rows.forEach(member => {
+            if (!groups[member.pay_group]) {
+                groups[member.pay_group] = [];
+            }
+            groups[member.pay_group].push(member);
+        });
+
+        res.json(groups);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to fetch payment rotation" });
+    }
+});
