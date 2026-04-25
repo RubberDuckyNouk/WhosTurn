@@ -5,7 +5,7 @@ Set up the base project with Node.js, install dependencies, and create the folde
 
 ## Tasks
 - Run `npm init` to create `package.json`
-- Install dependencies: `express`, `better-sqlite3`
+- Install dependencies: `express`, `pg`
 - Install dev dependencies: `nodemon`
 - Create folder structure (`public/`, `public/css/`, `public/js/`, `views/`, `db/`)
 - Add a `start` and `dev` script to `package.json`

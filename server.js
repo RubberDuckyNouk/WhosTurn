@@ -1,5 +1,6 @@
 const express = require("express");
 const path = require("path");
+const { pool, initDatabase } = require("./db/database");
 
 const app = express();
 const PORT = 3000;
@@ -28,6 +29,8 @@ app.get("/", (req, res) => {
 });
 
 // Start the server
-app.listen(PORT, () => {
-	console.log(`Server running on http://localhost:${PORT}`);
+initDatabase().then(() => {
+    app.listen(PORT, () => {
+        console.log(`Server running on http://localhost:${PORT}`);
+    });
 });
