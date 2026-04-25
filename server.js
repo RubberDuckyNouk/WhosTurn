@@ -139,8 +139,11 @@ app.post("/api/sessions", async (req, res) => {
                 // Wrap around to the first driver
                 await pool.query(
                     `UPDATE members SET is_current_driver = true
-                     WHERE in_carpool = true
-                     ORDER BY drive_order LIMIT 1`
+                     WHERE id = (
+                         SELECT id FROM members
+                         WHERE in_carpool = true
+                         ORDER BY drive_order LIMIT 1
+                     )`
                 );
             }
         }
