@@ -20,8 +20,12 @@ liveReloadServer.server.once("connection", () => {
     }, 100);
 });
 
+// Enable JSON parsing
+app.use(express.json());
+
 // Serve static files from the public folder
 app.use(express.static(path.join(__dirname, "public")));
+
 
 // get html file
 app.get("/", (req, res) => {
@@ -34,3 +38,15 @@ initDatabase().then(() => {
         console.log(`Server running on http://localhost:${PORT}`);
     });
 });
+
+// Get all members
+app.get("/api/members", async (req, res) => {
+    try {
+        const result = await pool.query("SELECT * FROM members ORDER BY name");
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to fetch members" });
+    }
+});
+

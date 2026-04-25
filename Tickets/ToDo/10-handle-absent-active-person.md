@@ -1,4 +1,4 @@
-# 12 - Handle Absent Active Person
+# 10 - Handle Absent Active Person
 
 ## Description
 Handle the case where the person whose turn it is to drive or pay is absent. The turn should fairly pass to the next person, and the absent person should not lose their place unfairly.

@@ -1,4 +1,4 @@
-# 10 - Record a Session
+# 08 - Record a Session
 
 ## Description
 Allow users to log a weekly climbing session. Recording a session advances the driving and payment rotations to the next person.

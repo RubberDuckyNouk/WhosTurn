@@ -1,4 +1,4 @@
-# 09 - Track Payment Turns
+# 07 - Track Payment Turns
 
 ## Description
 Implement a rotation system to track whose turn it is to pay for drinks. All members participate in the payment rotation regardless of carpool status.
