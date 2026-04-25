@@ -1,4 +1,4 @@
-# 11 - Session History
+# 10 - Session History
 
 ## Description
 Show a log of past sessions so users can see who drove and who paid on each date. This provides transparency and helps settle disputes.

@@ -1,4 +1,4 @@
-# 13 - create bitterballen index page
+# 12 - Bitterballen Index
 
 ## Description
 Create a page where members can add what they climb, keep track of their personal record grade. Bitterballen index goes up based on group efforts.
