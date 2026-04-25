@@ -85,7 +85,7 @@ async function loadPayment() {
                     <div class="col-md-6">
                         <div class="card h-100">
                             <div class="card-body">
-                                <h5 class="card-title">Balances - ${groupName}</h5>
+                                <h5 class="card-title">Beer Karma - ${groupName}</h5>
                                 <ul class="list-group list-group-flush">
                                     ${members.map(m => `
                                         <li class="list-group-item d-flex justify-content-between align-items-center">
