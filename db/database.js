@@ -12,7 +12,10 @@ async function initDatabase() {
             name VARCHAR(100) NOT NULL,
             in_carpool BOOLEAN NOT NULL DEFAULT false,
             drive_order INTEGER,
-            is_current_driver BOOLEAN NOT NULL DEFAULT false
+            is_current_driver BOOLEAN NOT NULL DEFAULT false,
+            pay_group INTEGER,
+            pay_order INTEGER,
+            is_current_payer BOOLEAN NOT NULL DEFAULT false
         )
     `);
     console.log("Database initialized — members table ready");
