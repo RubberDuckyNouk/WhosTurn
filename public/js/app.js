@@ -200,6 +200,7 @@ async function recordSession(payGroup) {
             msgDiv.innerHTML = `<span class="text-success">${payer.name} paid! ${data.message}</span>`;
             loadDriving();
             loadPayment();
+            loadHistory();
         } else {
             msgDiv.innerHTML = `<span class="text-danger">${data.error}</span>`;
         }
@@ -208,7 +209,106 @@ async function recordSession(payGroup) {
     }
 }
 
+// Current history filter
+let historyFilter = "week";
+
+// Load session history
+async function loadHistory() {
+    try {
+        const response = await fetch(`/api/sessions?filter=${historyFilter}`);
+        const sessions = await response.json();
+        const container = document.getElementById("sessionHistory");
+
+        if (sessions.length === 0) {
+            container.innerHTML = `<p class="text-muted">No sessions found for this period.</p>`;
+            return;
+        }
+
+        container.innerHTML = `
+            <ul class="list-group list-group-flush">
+                ${sessions.map(s => {
+                    const groupName = groupNames[s.pay_group] || `Group ${s.pay_group}`;
+                    const date = new Date(s.session_date).toLocaleDateString();
+                    return `
+                        <li class="list-group-item">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <strong>${date}</strong> — ${groupName}<br>
+                                    <small class="text-muted">
+                                        Paid: ${s.payer_name}
+                                        ${s.driver_name ? ` | Drove: ${s.driver_name}` : ""}
+                                        | Present: ${s.present.join(", ")}
+                                    </small>
+                                </div>
+                                <button class="btn btn-sm btn-outline-danger delete-session-btn"
+                                        data-id="${s.id}">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </li>
+                    `;
+                }).join("")}
+            </ul>
+        `;
+
+        // Add event listeners to delete buttons
+        document.querySelectorAll(".delete-session-btn").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const sessionId = parseInt(btn.dataset.id);
+                deleteSession(sessionId);
+            });
+        });
+    } catch (err) {
+        console.error("Failed to load session history:", err);
+    }
+}
+
+// History filter event listeners
+document.querySelectorAll(".history-filter").forEach(btn => {
+    btn.addEventListener("click", () => {
+        document.querySelectorAll(".history-filter").forEach(b => {
+            b.classList.remove("btn-primary", "active");
+            b.classList.add("btn-outline-primary");
+        });
+        btn.classList.remove("btn-outline-primary");
+        btn.classList.add("btn-primary", "active");
+        document.getElementById("historyMonth").value = "";
+        historyFilter = btn.dataset.filter;
+        loadHistory();
+    });
+});
+
+document.getElementById("historyMonth").addEventListener("change", (e) => {
+    if (e.target.value) {
+        document.querySelectorAll(".history-filter").forEach(b => {
+            b.classList.remove("btn-primary", "active");
+            b.classList.add("btn-outline-primary");
+        });
+        historyFilter = e.target.value;
+        loadHistory();
+    }
+});
+
+// Delete a session
+async function deleteSession(sessionId) {
+    if (!confirm("Delete this session and reverse the balance changes?")) return;
+
+    try {
+        const result = await fetch(`/api/sessions/${sessionId}`, {
+            method: "DELETE"
+        });
+
+        if (result.ok) {
+            loadHistory();
+            loadPayment();
+        }
+    } catch (err) {
+        console.error("Failed to delete session:", err);
+    }
+}
+
 // Load data when the page is ready
 loadMembers();
 loadDriving();
 loadPayment();
+loadHistory();

@@ -60,6 +60,21 @@
             <!-- Payment groups loaded by JavaScript -->
         </div>
 
+        <!-- Session History -->
+        <div class="card mt-4">
+            <div class="card-body">
+                <h5 class="card-title">Session History</h5>
+                <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+                    <button class="btn btn-sm btn-primary history-filter active" data-filter="week">This Week</button>
+                    <button class="btn btn-sm btn-outline-primary history-filter" data-filter="month">This Month</button>
+                    <input type="month" class="form-control form-control-sm" id="historyMonth" style="width: auto;">
+                </div>
+                <div id="sessionHistory">
+                    <!-- Loaded by JavaScript -->
+                </div>
+            </div>
+        </div>
+
     </main>
 
     <!--Footer-->

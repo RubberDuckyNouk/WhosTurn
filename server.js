@@ -166,3 +166,111 @@ app.post("/api/sessions", async (req, res) => {
     }
 });
 
+// Get session history
+app.get("/api/sessions", async (req, res) => {
+    try {
+        const filter = req.query.filter || "week";
+
+        let dateCondition;
+        let params = [];
+
+        if (filter === "week") {
+            dateCondition = "s.session_date >= date_trunc('week', CURRENT_DATE)";
+        } else if (filter === "month") {
+            dateCondition = "s.session_date >= date_trunc('month', CURRENT_DATE)";
+        } else {
+            // Expect format "2026-04" for a specific month
+            dateCondition = "to_char(s.session_date, 'YYYY-MM') = $1";
+            params = [filter];
+        }
+
+        const result = await pool.query(
+            `SELECT s.id, s.session_date, s.pay_group,
+                    p.name AS payer_name, d.name AS driver_name
+             FROM sessions s
+             JOIN members p ON s.payer_id = p.id
+             LEFT JOIN members d ON s.driver_id = d.id
+             WHERE ${dateCondition}
+             ORDER BY s.session_date DESC, s.id DESC`,
+            params
+        );
+
+        // Get attendance for each session
+        const sessions = [];
+        for (const row of result.rows) {
+            const attendance = await pool.query(
+                `SELECT m.name FROM session_attendance sa
+                 JOIN members m ON sa.member_id = m.id
+                 WHERE sa.session_id = $1
+                 ORDER BY m.name`,
+                [row.id]
+            );
+            sessions.push({
+                ...row,
+                present: attendance.rows.map(a => a.name)
+            });
+        }
+
+        res.json(sessions);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to fetch session history" });
+    }
+});
+
+// Delete a session and reverse balance changes
+app.delete("/api/sessions/:id", async (req, res) => {
+    const sessionId = parseInt(req.params.id);
+
+    try {
+        // Get the session details
+        const session = await pool.query(
+            "SELECT * FROM sessions WHERE id = $1",
+            [sessionId]
+        );
+
+        if (session.rows.length === 0) {
+            return res.status(404).json({ error: "Session not found" });
+        }
+
+        const { payer_id } = session.rows[0];
+
+        // Get who was present
+        const attendance = await pool.query(
+            "SELECT member_id FROM session_attendance WHERE session_id = $1",
+            [sessionId]
+        );
+        const presentIds = attendance.rows.map(r => r.member_id);
+        const otherPresent = presentIds.filter(id => id !== payer_id);
+
+        // Reverse balance changes: payer loses the points they gained
+        await pool.query(
+            "UPDATE members SET pay_balance = pay_balance - $1 WHERE id = $2",
+            [otherPresent.length, payer_id]
+        );
+
+        // Others gain back their -1
+        if (otherPresent.length > 0) {
+            await pool.query(
+                "UPDATE members SET pay_balance = pay_balance + 1 WHERE id = ANY($1)",
+                [otherPresent]
+            );
+        }
+
+        // Delete attendance records, then the session
+        await pool.query(
+            "DELETE FROM session_attendance WHERE session_id = $1",
+            [sessionId]
+        );
+        await pool.query(
+            "DELETE FROM sessions WHERE id = $1",
+            [sessionId]
+        );
+
+        res.json({ message: "Session deleted and balances reversed" });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to delete session" });
+    }
+});
+
