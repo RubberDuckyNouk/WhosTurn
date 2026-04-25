@@ -88,7 +88,7 @@ app.get("/api/payment", async (req, res) => {
 
 // Record a session
 app.post("/api/sessions", async (req, res) => {
-    const { pay_group, payer_id, present_ids } = req.body;
+    const { pay_group, payer_id, present_ids, session_date } = req.body;
 
     if (!pay_group || !payer_id || !present_ids || present_ids.length === 0) {
         return res.status(400).json({ error: "Missing required fields" });
@@ -102,8 +102,8 @@ app.post("/api/sessions", async (req, res) => {
         const currentDriver = driverResult.rows[0] || null;
 
         const sessionResult = await pool.query(
-            "INSERT INTO sessions (driver_id, payer_id, pay_group) VALUES ($1, $2, $3) RETURNING id",
-            [currentDriver ? currentDriver.id : null, payer_id, pay_group]
+            "INSERT INTO sessions (session_date, driver_id, payer_id, pay_group) VALUES ($1, $2, $3, $4) RETURNING id",
+            [session_date || new Date(), currentDriver ? currentDriver.id : null, payer_id, pay_group]
         );
         const sessionId = sessionResult.rows[0].id;
 

@@ -122,6 +122,12 @@ async function loadPayment() {
                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                             </div>
                             <div class="modal-body">
+                                <div class="mb-3">
+                                    <label class="form-label" for="sessionDate-${groupNum}">Date</label>
+                                    <input type="date" class="form-control session-date"
+                                           id="sessionDate-${groupNum}" data-group="${groupNum}"
+                                           value="${new Date().toISOString().split("T")[0]}">
+                                </div>
                                 <p class="text-muted">Uncheck absent members:</p>
                                 ${members.map(m => `
                                     <div class="form-check">
@@ -163,6 +169,7 @@ async function recordSession(payGroup) {
     // Get checked (present) member IDs
     const checkboxes = document.querySelectorAll(`.attendance-${payGroup}:checked`);
     const presentIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
+    const sessionDate = document.getElementById(`sessionDate-${payGroup}`).value;
 
     if (presentIds.length < 2) {
         const msgDiv = document.querySelector(`.session-message-${payGroup}`);
@@ -186,7 +193,8 @@ async function recordSession(payGroup) {
             body: JSON.stringify({
                 pay_group: payGroup,
                 payer_id: payer.id,
-                present_ids: presentIds
+                present_ids: presentIds,
+                session_date: sessionDate
             }),
         });
 
