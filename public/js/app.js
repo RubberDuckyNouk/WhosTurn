@@ -42,6 +42,9 @@ async function loadDriving() {
     }
 }
 
+// Group display names
+const groupNames = { 1: "DomoYomo", 2: "P.S." };
+
 // Load payment balances per group
 async function loadPayment() {
     try {
@@ -52,59 +55,87 @@ async function loadPayment() {
         container.innerHTML = Object.keys(groups).map(groupNum => {
             const members = groups[groupNum];
             const suggestedPayer = members[0]; // Highest balance is first (sorted by server)
+            const groupName = groupNames[groupNum] || `Group ${groupNum}`;
 
             return `
-                <!-- Group ${groupNum} Next Payer -->
-                <div class="card mt-4">
-                    <div class="card-body text-center">
-                        <h5 class="card-title">Next to Pay - Group ${groupNum}</h5>
-                        <p class="display-6">${suggestedPayer ? suggestedPayer.name : "No members"}</p>
-                    </div>
-                </div>
-
-                <!-- Group ${groupNum} Balances -->
-                <div class="card mt-3">
-                    <div class="card-body">
-                        <h5 class="card-title">Balances - Group ${groupNum}</h5>
-                        <ul class="list-group list-group-flush">
-                            ${members.map(m => `
-                                <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    ${m.name}
-                                    <span class="badge ${m.pay_balance > 0 ? "bg-danger" : m.pay_balance < 0 ? "bg-success" : "bg-secondary"}">
-                                        ${m.pay_balance > 0 ? "+" : ""}${m.pay_balance}
-                                    </span>
-                                </li>
-                            `).join("")}
-                        </ul>
-                    </div>
-                </div>
-
-                <!-- Group ${groupNum} Record Session -->
-                <div class="card mt-3">
-                    <div class="card-body">
-                        <h5 class="card-title">Record Session - Group ${groupNum}</h5>
-                        <p class="text-muted">Check who's present:</p>
-                        ${members.map(m => `
-                            <div class="form-check">
-                                <input class="form-check-input attendance-${groupNum}"
-                                       type="checkbox" value="${m.id}"
-                                       id="attend-${m.id}" checked>
-                                <label class="form-check-label" for="attend-${m.id}">
-                                    ${m.name}
-                                </label>
+                <div class="row mt-4">
+                    <!-- Group ${groupNum} Next Payer -->
+                    <div class="col-md-6">
+                        <div class="card h-100">
+                            <div class="card-body text-center">
+                                <h5 class="card-title">Next to Pay - ${groupName}</h5>
+                                <p class="display-6">${suggestedPayer ? suggestedPayer.name : "No members"}</p>
                             </div>
-                        `).join("")}
-                        <button class="btn btn-success mt-3 record-btn" data-group="${groupNum}">
-                            Record Group ${groupNum}
-                        </button>
-                        <div class="session-message-${groupNum} mt-2"></div>
+                        </div>
+                    </div>
+
+                    <!-- Group ${groupNum} Balances -->
+                    <div class="col-md-6">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title">Balances - ${groupName}</h5>
+                                <ul class="list-group list-group-flush">
+                                    ${members.map(m => `
+                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                            ${m.name}
+                                            <span class="badge ${m.pay_balance > 0 ? "bg-danger" : m.pay_balance < 0 ? "bg-success" : "bg-secondary"}">
+                                                ${m.pay_balance > 0 ? "+" : ""}${m.pay_balance}
+                                            </span>
+                                        </li>
+                                    `).join("")}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Group ${groupNum} Record Button -->
+                <div class="text-center mt-3">
+                    <button class="btn btn-success record-btn" data-group="${groupNum}"
+                            data-bs-toggle="modal" data-bs-target="#recordModal-${groupNum}">
+                        Record Session - ${groupName}
+                    </button>
+                    <div class="session-message-${groupNum} mt-2"></div>
+                </div>
+
+                <!-- Group ${groupNum} Record Modal -->
+                <div class="modal fade" id="recordModal-${groupNum}" tabindex="-1"
+                     aria-labelledby="recordModalLabel-${groupNum}" aria-hidden="true">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="recordModalLabel-${groupNum}">
+                                    Record Session - ${groupName}
+                                </h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p class="text-muted">Uncheck absent members:</p>
+                                ${members.map(m => `
+                                    <div class="form-check">
+                                        <input class="form-check-input attendance-${groupNum}"
+                                               type="checkbox" value="${m.id}"
+                                               id="attend-${m.id}" checked>
+                                        <label class="form-check-label" for="attend-${m.id}">
+                                            ${m.name}
+                                        </label>
+                                    </div>
+                                `).join("")}
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <button type="button" class="btn btn-success confirm-record-btn" data-group="${groupNum}">
+                                    Confirm
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
         }).join("");
 
-        // Add event listeners to record buttons
-        document.querySelectorAll(".record-btn").forEach(btn => {
+        // Add event listeners to confirm buttons inside modals
+        document.querySelectorAll(".confirm-record-btn").forEach(btn => {
             btn.addEventListener("click", () => {
                 const groupNum = btn.dataset.group;
                 recordSession(parseInt(groupNum));
@@ -121,9 +152,9 @@ async function recordSession(payGroup) {
     const checkboxes = document.querySelectorAll(`.attendance-${payGroup}:checked`);
     const presentIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
 
-    if (presentIds.length === 0) {
+    if (presentIds.length < 2) {
         const msgDiv = document.querySelector(`.session-message-${payGroup}`);
-        msgDiv.innerHTML = `<span class="text-danger">At least one person must be present</span>`;
+        msgDiv.innerHTML = `<span class="text-danger">At least 2 people must be present</span>`;
         return;
     }
 
@@ -151,6 +182,9 @@ async function recordSession(payGroup) {
         const msgDiv = document.querySelector(`.session-message-${payGroup}`);
 
         if (result.ok) {
+            // Close the modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById(`recordModal-${payGroup}`));
+            if (modal) modal.hide();
             msgDiv.innerHTML = `<span class="text-success">${payer.name} paid! ${data.message}</span>`;
             loadDriving();
             loadPayment();
