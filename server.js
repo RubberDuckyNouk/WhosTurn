@@ -63,11 +63,11 @@ app.get("/api/driving", async (req, res) => {
     }
 });
 
-// Get payment rotation (per group)
+// Get payment balances (per group)
 app.get("/api/payment", async (req, res) => {
     try {
         const result = await pool.query(
-            "SELECT * FROM members WHERE pay_group IS NOT NULL ORDER BY pay_group, pay_order"
+            "SELECT * FROM members WHERE pay_group IS NOT NULL ORDER BY pay_group, pay_balance DESC, name"
         );
 
         // Group members by pay_group
@@ -82,46 +82,60 @@ app.get("/api/payment", async (req, res) => {
         res.json(groups);
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: "Failed to fetch payment rotation" });
+        res.status(500).json({ error: "Failed to fetch payment data" });
     }
 });
 
 // Record a session
 app.post("/api/sessions", async (req, res) => {
-    const { pay_group } = req.body;
+    const { pay_group, payer_id, present_ids } = req.body;
+
+    if (!pay_group || !payer_id || !present_ids || present_ids.length === 0) {
+        return res.status(400).json({ error: "Missing required fields" });
+    }
 
     try {
-        // Get current driver (if group 1, which has the carpool)
+        // Record the session
         const driverResult = await pool.query(
             "SELECT * FROM members WHERE is_current_driver = true"
         );
         const currentDriver = driverResult.rows[0] || null;
 
-        // Get current payer for this group
-        const payerResult = await pool.query(
-            "SELECT * FROM members WHERE pay_group = $1 AND is_current_payer = true",
-            [pay_group]
+        const sessionResult = await pool.query(
+            "INSERT INTO sessions (driver_id, payer_id, pay_group) VALUES ($1, $2, $3) RETURNING id",
+            [currentDriver ? currentDriver.id : null, payer_id, pay_group]
         );
-        const currentPayer = payerResult.rows[0];
+        const sessionId = sessionResult.rows[0].id;
 
-        if (!currentPayer) {
-            return res.status(400).json({ error: "No current payer set for this group" });
+        // Record attendance
+        for (const memberId of present_ids) {
+            await pool.query(
+                "INSERT INTO session_attendance (session_id, member_id) VALUES ($1, $2)",
+                [sessionId, memberId]
+            );
         }
 
-        // Record the session
+        // Update balances: payer gets -1, all other present members get +1
         await pool.query(
-            "INSERT INTO sessions (driver_id, payer_id, pay_group) VALUES ($1, $2, $3)",
-            [currentDriver ? currentDriver.id : null, currentPayer.id, pay_group]
+            "UPDATE members SET pay_balance = pay_balance - 1 WHERE id = $1",
+            [payer_id]
         );
 
-        // Advance driving rotation (only when group 1 records, since they have the carpool)
+        const otherPresent = present_ids.filter(id => id !== payer_id);
+        if (otherPresent.length > 0) {
+            await pool.query(
+                `UPDATE members SET pay_balance = pay_balance + 1
+                 WHERE id = ANY($1)`,
+                [otherPresent]
+            );
+        }
+
+        // Advance driving rotation (only when group 1 records)
         if (pay_group === 1 && currentDriver) {
-            // Remove current driver flag
             await pool.query(
                 "UPDATE members SET is_current_driver = false WHERE is_current_driver = true"
             );
 
-            // Find the next driver
             const nextDriver = await pool.query(
                 `SELECT * FROM members
                  WHERE in_carpool = true AND drive_order > $1
@@ -130,13 +144,11 @@ app.post("/api/sessions", async (req, res) => {
             );
 
             if (nextDriver.rows.length > 0) {
-                // Set next person as current driver
                 await pool.query(
                     "UPDATE members SET is_current_driver = true WHERE id = $1",
                     [nextDriver.rows[0].id]
                 );
             } else {
-                // Wrap around to the first driver
                 await pool.query(
                     `UPDATE members SET is_current_driver = true
                      WHERE id = (
@@ -148,40 +160,10 @@ app.post("/api/sessions", async (req, res) => {
             }
         }
 
-        // Advance payment rotation for this group
-        await pool.query(
-            "UPDATE members SET is_current_payer = false WHERE pay_group = $1 AND is_current_payer = true",
-            [pay_group]
-        );
-
-        const nextPayer = await pool.query(
-            `SELECT * FROM members
-             WHERE pay_group = $1 AND pay_order > $2
-             ORDER BY pay_order LIMIT 1`,
-            [pay_group, currentPayer.pay_order]
-        );
-
-        if (nextPayer.rows.length > 0) {
-            await pool.query(
-                "UPDATE members SET is_current_payer = true WHERE id = $1",
-                [nextPayer.rows[0].id]
-            );
-        } else {
-            // Wrap around to the first payer in this group
-            await pool.query(
-                `UPDATE members SET is_current_payer = true
-                 WHERE id = (
-                     SELECT id FROM members
-                     WHERE pay_group = $1
-                     ORDER BY pay_order LIMIT 1
-                 )`,
-                [pay_group]
-            );
-        }
-
         res.status(201).json({ message: "Session recorded" });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Failed to record session" });
     }
 });
+

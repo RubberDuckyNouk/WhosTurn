@@ -14,8 +14,7 @@ async function initDatabase() {
             drive_order INTEGER,
             is_current_driver BOOLEAN NOT NULL DEFAULT false,
             pay_group INTEGER,
-            pay_order INTEGER,
-            is_current_payer BOOLEAN NOT NULL DEFAULT false
+            pay_balance INTEGER NOT NULL DEFAULT 0
         )
     `);
 
@@ -26,6 +25,14 @@ async function initDatabase() {
             driver_id INTEGER REFERENCES members(id),
             payer_id INTEGER NOT NULL REFERENCES members(id),
             pay_group INTEGER NOT NULL
+        )
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS session_attendance (
+            id SERIAL PRIMARY KEY,
+            session_id INTEGER NOT NULL REFERENCES sessions(id),
+            member_id INTEGER NOT NULL REFERENCES members(id)
         )
     `);
 
