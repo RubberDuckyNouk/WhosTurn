@@ -67,7 +67,7 @@ app.get("/api/driving", async (req, res) => {
 app.get("/api/payment", async (req, res) => {
     try {
         const result = await pool.query(
-            "SELECT * FROM members WHERE pay_group IS NOT NULL ORDER BY pay_group, pay_balance DESC, name"
+            "SELECT * FROM members WHERE pay_group IS NOT NULL ORDER BY pay_group, pay_balance ASC, name"
         );
 
         // Group members by pay_group
@@ -115,16 +115,15 @@ app.post("/api/sessions", async (req, res) => {
             );
         }
 
-        // Update balances: payer gets -1, all other present members get +1
-        await pool.query(
-            "UPDATE members SET pay_balance = pay_balance - 1 WHERE id = $1",
-            [payer_id]
-        );
-
+        // Update balances: payer gets +N (one per person paid for), others get -1
         const otherPresent = present_ids.filter(id => id !== payer_id);
+        await pool.query(
+            "UPDATE members SET pay_balance = pay_balance + $1 WHERE id = $2",
+            [otherPresent.length, payer_id]
+        );
         if (otherPresent.length > 0) {
             await pool.query(
-                `UPDATE members SET pay_balance = pay_balance + 1
+                `UPDATE members SET pay_balance = pay_balance - 1
                  WHERE id = ANY($1)`,
                 [otherPresent]
             );

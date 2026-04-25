@@ -19,6 +19,10 @@ async function loadMembers() {
     }
 }
 
+// Car icon colours per driver
+const carColors = { "Nouk": "red" };
+const defaultCarColor = "grey";
+
 // Load driving rotation and current driver
 async function loadDriving() {
     try {
@@ -28,15 +32,23 @@ async function loadDriving() {
         // Show current driver
         const current = drivers.find(d => d.is_current_driver);
         const currentDriver = document.getElementById("currentDriver");
-        currentDriver.textContent = current ? current.name : "No driver set";
+        if (current) {
+            const color = carColors[current.name] || defaultCarColor;
+            currentDriver.innerHTML = `<i class="bi bi-car-front-fill me-2" style="color: ${color}"></i>${current.name}`;
+        } else {
+            currentDriver.textContent = "No driver set";
+        }
 
         // Show rotation order
         const drivingOrder = document.getElementById("drivingOrder");
-        drivingOrder.innerHTML = drivers.map(driver => `
+        drivingOrder.innerHTML = drivers.map(driver => {
+            const color = carColors[driver.name] || defaultCarColor;
+            return `
             <li class="list-group-item ${driver.is_current_driver ? "active" : ""}">
-                ${driver.name}
+                <i class="bi bi-car-front-fill me-2" style="color: ${color}"></i>${driver.name}
             </li>
-        `).join("");
+        `;
+        }).join("");
     } catch (err) {
         console.error("Failed to load driving data:", err);
     }
@@ -54,7 +66,7 @@ async function loadPayment() {
 
         container.innerHTML = Object.keys(groups).map(groupNum => {
             const members = groups[groupNum];
-            const suggestedPayer = members[0]; // Highest balance is first (sorted by server)
+            const suggestedPayer = members[0]; // Lowest balance is first (sorted by server)
             const groupName = groupNames[groupNum] || `Group ${groupNum}`;
 
             return `
@@ -78,7 +90,7 @@ async function loadPayment() {
                                     ${members.map(m => `
                                         <li class="list-group-item d-flex justify-content-between align-items-center">
                                             ${m.name}
-                                            <span class="badge ${m.pay_balance > 0 ? "bg-danger" : m.pay_balance < 0 ? "bg-success" : "bg-secondary"}">
+                                            <span class="badge ${m.pay_balance < 0 ? "bg-danger" : m.pay_balance > 0 ? "bg-success" : "bg-secondary"}">
                                                 ${m.pay_balance > 0 ? "+" : ""}${m.pay_balance}
                                             </span>
                                         </li>
@@ -163,9 +175,9 @@ async function recordSession(payGroup) {
     const groups = await response.json();
     const members = groups[payGroup];
 
-    // Find the present member with the highest balance
+    // Find the present member with the lowest balance (owes the most)
     const presentMembers = members.filter(m => presentIds.includes(m.id));
-    const payer = presentMembers[0]; // Already sorted by highest balance
+    const payer = presentMembers[0]; // Already sorted by lowest balance
 
     try {
         const result = await fetch("/api/sessions", {
