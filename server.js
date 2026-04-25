@@ -50,3 +50,16 @@ app.get("/api/members", async (req, res) => {
     }
 });
 
+// Get driving rotation
+app.get("/api/driving", async (req, res) => {
+    try {
+        const result = await pool.query(
+            "SELECT * FROM members WHERE in_carpool = true ORDER BY drive_order"
+        );
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to fetch driving rotation" });
+    }
+});
+
