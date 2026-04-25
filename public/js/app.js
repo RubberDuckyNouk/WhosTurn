@@ -82,6 +82,35 @@ async function loadPayment() {
     }
 }
 
+// Record a session for a group
+async function recordSession(payGroup) {
+    try {
+        const response = await fetch("/api/sessions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pay_group: payGroup }),
+        });
+
+        const data = await response.json();
+        const sessionMessage = document.getElementById("sessionMessage");
+
+        if (response.ok) {
+            sessionMessage.innerHTML = `<span class="text-success">${data.message}</span>`;
+            // Reload all data to show updated rotations
+            loadDriving();
+            loadPayment();
+        } else {
+            sessionMessage.innerHTML = `<span class="text-danger">${data.error}</span>`;
+        }
+    } catch (err) {
+        console.error("Failed to record session:", err);
+    }
+}
+
+// Button event listeners
+document.getElementById("recordGroup1").addEventListener("click", () => recordSession(1));
+document.getElementById("recordGroup2").addEventListener("click", () => recordSession(2));
+
 // Load data when the page is ready
 loadMembers();
 loadDriving();
