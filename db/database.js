@@ -36,6 +36,16 @@ async function initDatabase() {
         )
     `);
 
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS climbs (
+            id SERIAL PRIMARY KEY,
+            member_id INTEGER NOT NULL REFERENCES members(id),
+            grade VARCHAR(10) NOT NULL,
+            grade_value INTEGER NOT NULL,
+            climb_date DATE NOT NULL DEFAULT CURRENT_DATE
+        )
+    `);
+
     console.log("Database initialized — tables ready");
 }
 

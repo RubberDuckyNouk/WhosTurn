@@ -5,6 +5,7 @@ const { pool, initDatabase } = require("./db/database");
 const app = express();
 const PORT = 3000;
 
+
 // Live reload (development only)
 const livereload = require("livereload");
 
@@ -19,6 +20,16 @@ liveReloadServer.server.once("connection", () => {
         liveReloadServer.refresh("/");
     }, 100);
 });
+
+// Climbing grade order (French bouldering scale, no + grades)
+const GRADES = [
+    "3a", "3b", "3c",
+    "4a", "4b", "4c",
+    "5a", "5b", "5c",
+    "6a", "6b", "6c",
+    "7a", "7b", "7c",
+    "8a", "8b"
+];
 
 // Enable JSON parsing
 app.use(express.json());
@@ -274,3 +285,124 @@ app.delete("/api/sessions/:id", async (req, res) => {
     }
 });
 
+// Log a climb
+app.post("/api/climbs", async (req, res) => {
+    const { member_id, grade, climb_date } = req.body;
+
+    const gradeValue = GRADES.indexOf(grade);
+    if (!member_id || gradeValue === -1) {
+        return res.status(400).json({ error: "Invalid member or grade" });
+    }
+
+    try {
+        await pool.query(
+            "INSERT INTO climbs (member_id, grade, grade_value, climb_date) VALUES ($1, $2, $3, $4)",
+            [member_id, grade, gradeValue, climb_date || new Date()]
+        );
+        res.status(201).json({ message: "Climb logged" });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to log climb" });
+    }
+});
+
+// Get current session climbs and PRs
+app.get("/api/climbs/current", async (req, res) => {
+    try {
+        // Calculate last Thursday (or today if it's Thursday)
+        const now = new Date();
+        const day = now.getDay(); // 0=Sun, 4=Thu
+        const daysSinceThursday = (day >= 4) ? (day - 4) : (day + 3);
+        const lastThursday = new Date(now);
+        lastThursday.setDate(now.getDate() - daysSinceThursday);
+        lastThursday.setHours(0, 0, 0, 0);
+
+        // Get all members
+        const membersResult = await pool.query("SELECT id, name FROM members ORDER BY name");
+        const members = membersResult.rows;
+
+        // Get PRs for each member (all-time highest grade BEFORE this session)
+        // and current session climbs
+        const data = [];
+        for (const member of members) {
+            // All-time PR (before this session)
+            const prBefore = await pool.query(
+                `SELECT grade, grade_value FROM climbs
+                 WHERE member_id = $1 AND climb_date < $2
+                 ORDER BY grade_value DESC LIMIT 1`,
+                [member.id, lastThursday]
+            );
+
+            // Overall PR (including this session)
+            const prAll = await pool.query(
+                `SELECT grade, grade_value FROM climbs
+                 WHERE member_id = $1
+                 ORDER BY grade_value DESC LIMIT 1`,
+                [member.id]
+            );
+
+            // Current session climbs
+            const sessionClimbs = await pool.query(
+                `SELECT grade, grade_value FROM climbs
+                 WHERE member_id = $1 AND climb_date >= $2
+                 ORDER BY grade_value DESC`,
+                [member.id, lastThursday]
+            );
+
+            const prBeforeValue = prBefore.rows[0]?.grade_value ?? -1;
+            const sessionHighValue = sessionClimbs.rows[0]?.grade_value ?? -1;
+            const isNewPr = sessionHighValue > prBeforeValue && sessionClimbs.rows.length > 0;
+            const climbedAtPr = sessionHighValue >= prBeforeValue && prBeforeValue >= 0 && sessionClimbs.rows.length > 0;
+
+            // Calculate points for this member (fractional, 1/N = full share)
+            // New PR / at PR = full share, one below = 1/2, two below = 1/5, lower = 1/10
+            const share = 1 / members.length;
+            let memberPoints = 0;
+            for (const climb of sessionClimbs.rows) {
+                if (climb.grade_value > prBeforeValue) {
+                    memberPoints += share * 1.5; // new PR
+                } else if (climb.grade_value === prBeforeValue) {
+                    memberPoints += share; // at PR
+                } else if (climb.grade_value === prBeforeValue - 1) {
+                    memberPoints += share / 2; // one below
+                } else if (climb.grade_value === prBeforeValue - 2) {
+                    memberPoints += share / 5; // two below
+                } else if (prBeforeValue >= 0) {
+                    memberPoints += share / 10; // anything lower
+                }
+            }
+
+            data.push({
+                id: member.id,
+                name: member.name,
+                pr: prAll.rows[0]?.grade || null,
+                session_climbs: sessionClimbs.rows.length,
+                session_high: sessionClimbs.rows[0]?.grade || null,
+                is_new_pr: isNewPr,
+                climbed_at_pr: climbedAtPr,
+                points: memberPoints
+            });
+        }
+
+        // Bitterballen index = total points across all members (no cap)
+        // Target is 1.0 (each member's full share = 1/N, all members = 1.0)
+        let totalPoints = 0;
+        for (const m of data) {
+            totalPoints += m.points;
+        }
+
+        res.json({ members: data, bitterballen_index: totalPoints, target: 1.0 });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to fetch climb data" });
+    }
+});
+
+// Get available grades
+app.get("/api/grades", (req, res) => {
+    res.json(GRADES);
+});
+
+app.get("/bitterballen", (req, res) => {
+    res.sendFile(path.join(__dirname, "views", "bitterballen.html"));
+});

@@ -9,212 +9,362 @@ Create a page where members can log what they climb, keep track of their persona
 - Entered climb is stored with current date in the database
 - All climbs per member are stored in the database
 - App shows personal record grade for each member
-- App shows 'bitterballen index' which resets to 0% before every session (thursday) and reaches 100% if all members climbed at their PR. If one member sets a new PR this counts the same as 2 people climbing at their max level.
-- Bitterballen index is a thermometer style progress bar.
+- App shows 'bitterballen index' — a running score (no cap) that resets every Thursday. Each route logged earns points based on how close it is to the climber's PR.
+- Bitterballen index is a thermometer style progress bar (can exceed the target).
 - Text explaining the current index reached is displayed.
+
+## Point System
+Fractional system — each member's full share = `1/N` (where N = member count). Target = 1.0 (100%).
+
+Each **route** earns per climber:
+- New PR: **1/N** (full share per route — can exceed 100% with multiple)
+- At PR: **1/N** (full share — one route = 100% contribution)
+- One grade below PR: **1/2N** (half share — need 2 routes to reach full contribution)
+- Anything lower: **0**
+
+100% = every member climbed at their PR once, OR one grade below twice. New PRs and extra routes push past 100%.
+
+No + grades — scale is: 3a, 3b, 3c, 4a, 4b, 4c, 5a, 5b, 5c, 6a, 6b, 6c, 7a, 7b, 7c, 8a, 8b.
+
+If the score exceeds 100%, the thermometer bar turns **pink** with a different celebration text.
 
 ## Notes
 - Ticket 13 (Climbing Tracker graph) builds on this ticket's data. Do this one first.
 
 ---
 
-## Implementation Steps
+## Progress
 
-### Step 1: Add the `climbs` table in `db/database.js`
+Steps 1-5 are DONE (database table, API endpoints, route, navbar link). What remains is finishing the HTML body and writing the frontend JS.
 
-Add this after the `session_attendance` table creation:
+---
 
-```js
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS climbs (
-            id SERIAL PRIMARY KEY,
-            member_id INTEGER NOT NULL REFERENCES members(id),
-            grade VARCHAR(10) NOT NULL,
-            grade_value INTEGER NOT NULL,
-            climb_date DATE NOT NULL DEFAULT CURRENT_DATE
-        )
-    `);
-```
+## Step 6: Complete `views/bitterballen.html`
 
-`grade` stores the display string (e.g. "6a+"), `grade_value` stores a numeric value for comparison/sorting.
-
-### Step 2: Add API endpoints in `server.js`
-
-Add a grade mapping at the top of `server.js` (after the requires):
-
-```js
-// Climbing grade order (French bouldering scale)
-const GRADES = [
-    "4", "4+", "5a", "5a+", "5b", "5b+", "5c", "5c+",
-    "6a", "6a+", "6b", "6b+", "6c", "6c+",
-    "7a", "7a+", "7b", "7b+", "7c", "7c+",
-    "8a", "8a+", "8b", "8b+"
-];
-```
-
-**POST `/api/climbs`** — log a climb:
-
-```js
-// Log a climb
-app.post("/api/climbs", async (req, res) => {
-    const { member_id, grade, climb_date } = req.body;
-
-    const gradeValue = GRADES.indexOf(grade);
-    if (!member_id || gradeValue === -1) {
-        return res.status(400).json({ error: "Invalid member or grade" });
-    }
-
-    try {
-        await pool.query(
-            "INSERT INTO climbs (member_id, grade, grade_value, climb_date) VALUES ($1, $2, $3, $4)",
-            [member_id, grade, gradeValue, climb_date || new Date()]
-        );
-        res.status(201).json({ message: "Climb logged" });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to log climb" });
-    }
-});
-```
-
-**GET `/api/climbs/current`** — get current session climbs (since last Thursday) and PRs:
-
-```js
-// Get current session climbs and PRs
-app.get("/api/climbs/current", async (req, res) => {
-    try {
-        // Calculate last Thursday (or today if it's Thursday)
-        const now = new Date();
-        const day = now.getDay(); // 0=Sun, 4=Thu
-        const daysSinceThursday = (day >= 4) ? (day - 4) : (day + 3);
-        const lastThursday = new Date(now);
-        lastThursday.setDate(now.getDate() - daysSinceThursday);
-        lastThursday.setHours(0, 0, 0, 0);
-
-        // Get all members
-        const membersResult = await pool.query("SELECT id, name FROM members ORDER BY name");
-        const members = membersResult.rows;
-
-        // Get PRs for each member (all-time highest grade BEFORE this session)
-        // and current session climbs
-        const data = [];
-        for (const member of members) {
-            // All-time PR (before this session)
-            const prBefore = await pool.query(
-                `SELECT grade, grade_value FROM climbs
-                 WHERE member_id = $1 AND climb_date < $2
-                 ORDER BY grade_value DESC LIMIT 1`,
-                [member.id, lastThursday]
-            );
-
-            // Overall PR (including this session)
-            const prAll = await pool.query(
-                `SELECT grade, grade_value FROM climbs
-                 WHERE member_id = $1
-                 ORDER BY grade_value DESC LIMIT 1`,
-                [member.id]
-            );
-
-            // Current session climbs
-            const sessionClimbs = await pool.query(
-                `SELECT grade, grade_value FROM climbs
-                 WHERE member_id = $1 AND climb_date >= $2
-                 ORDER BY grade_value DESC`,
-                [member.id, lastThursday]
-            );
-
-            const prBeforeValue = prBefore.rows[0]?.grade_value ?? -1;
-            const sessionHighValue = sessionClimbs.rows[0]?.grade_value ?? -1;
-            const isNewPr = sessionHighValue > prBeforeValue && sessionClimbs.rows.length > 0;
-            const climbedAtPr = sessionHighValue >= prBeforeValue && prBeforeValue >= 0 && sessionClimbs.rows.length > 0;
-
-            data.push({
-                id: member.id,
-                name: member.name,
-                pr: prAll.rows[0]?.grade || null,
-                session_climbs: sessionClimbs.rows.length,
-                session_high: sessionClimbs.rows[0]?.grade || null,
-                is_new_pr: isNewPr,
-                climbed_at_pr: climbedAtPr
-            });
-        }
-
-        // Calculate bitterballen index
-        // Each member at PR = 1 point, new PR = 2 points
-        // 100% = total_members points
-        let points = 0;
-        for (const m of data) {
-            if (m.is_new_pr) points += 2;
-            else if (m.climbed_at_pr) points += 1;
-        }
-        const index = Math.min(100, Math.round((points / members.length) * 100));
-
-        res.json({ members: data, bitterballen_index: index });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to fetch climb data" });
-    }
-});
-```
-
-**GET `/api/grades`** — return the grade list for the dropdown:
-
-```js
-// Get available grades
-app.get("/api/grades", (req, res) => {
-    res.json(GRADES);
-});
-```
-
-### Step 3: Create the Bitterballen page `views/bitterballen.html`
-
-Create a new HTML page with the same layout as `index.html` (navbar, Bootstrap, footer). Include:
-
-- A thermometer-style progress bar for the bitterballen index
-- A text explanation of the current index
-- A table showing each member's: name, PR, session climbs count, session high grade, and whether they set a new PR
-- A form to log a climb: member dropdown, grade dropdown, date picker (default today), submit button
-
-### Step 4: Serve the page in `server.js`
-
-```js
-app.get("/bitterballen", (req, res) => {
-    res.sendFile(path.join(__dirname, "views", "bitterballen.html"));
-});
-```
-
-### Step 5: Add navbar link in both `index.html` and `bitterballen.html`
-
-Add to the navbar `<ul>`:
+Replace the current file contents with:
 
 ```html
-<li class="nav-item">
-    <a class="nav-link" href="/bitterballen">Bitterballen</a>
-</li>
+<!doctype html>
+<html>
+
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bami tracker by Nouk</title>
+
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
+          rel="stylesheet">
+
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+    <!-- Custom stylesheet -->
+    <link rel="stylesheet" href="css/style.css">
+
+</head>
+
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">WhosTurn</a>
+
+            <!-- Hamburger button (shows on small screens) -->
+            <button class="navbar-toggler" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#mainNav"
+                    aria-controls="mainNav" aria-expanded="false"
+                    aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <!-- Links (collapse into hamburger on small screens) -->
+            <div class="collapse navbar-collapse" id="mainNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/bitterballen">Bitterballen</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container my-4">
+        <h1>Bitterballen Index</h1>
+
+        <!-- Thermometer + explanation -->
+        <div class="card mt-4">
+            <div class="card-body text-center">
+                <h5 class="card-title">This Week's Index</h5>
+                <div class="progress mt-3" style="height: 2rem;">
+                    <div id="thermometer" class="progress-bar" role="progressbar"
+                         style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                        0%
+                    </div>
+                </div>
+                <p id="indexText" class="mt-3 fw-bold">Loading...</p>
+            </div>
+        </div>
+
+        <!-- Member stats table -->
+        <div class="card mt-4">
+            <div class="card-body">
+                <h5 class="card-title">Session Stats</h5>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>PR</th>
+                                <th>Climbs</th>
+                                <th>Session High</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="memberStats">
+                            <!-- Filled by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Log a climb form -->
+        <div class="card mt-4">
+            <div class="card-body">
+                <h5 class="card-title">Log a Climb</h5>
+                <form id="climbForm">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-sm">
+                            <label for="climbMember" class="form-label">Member</label>
+                            <select id="climbMember" class="form-select" required>
+                                <option value="">Select member...</option>
+                            </select>
+                        </div>
+                        <div class="col-sm">
+                            <label for="climbGrade" class="form-label">Grade</label>
+                            <select id="climbGrade" class="form-select" required>
+                                <option value="">Select grade...</option>
+                            </select>
+                        </div>
+                        <div class="col-sm">
+                            <label for="climbDate" class="form-label">Date</label>
+                            <input type="date" id="climbDate" class="form-control">
+                        </div>
+                        <div class="col-sm-auto">
+                            <button type="submit" class="btn btn-primary">Log Climb</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+    </main>
+
+    <!--Footer-->
+    <footer>
+        <div class="container">
+            <p>Beer poured by
+                <a href="https://yosemite.nl/" target="_blank" rel="noopener">
+                    <img src="/images/YosemiteLogo.png" alt="Yosemite" style="height: 2em; vertical-align: middle;">
+                </a>
+            </p>
+            <p>Check out my other work.</p>
+            <a href="https://www.linkedin.com/in/nouk-g-1718b9170/" target="_blank" rel="noopener"
+               class=" me-3 fs-5">
+                <i class="bi bi-linkedin"></i>
+            </a>
+            <a href="https://github.com/RubberDuckyNouk" target="_blank" rel="noopener"
+               class="fs-5">
+                <i class="bi bi-github"></i>
+            </a>
+        </div>
+    </footer>
+
+    <!-- Bootstrap 5 JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Bitterballen JavaScript -->
+    <script src="/js/bitterballen.js"></script>
+
+    <!-- Live reload -->
+    <script src="http://localhost:35729/livereload.js"></script>
+
+</body>
+</html>
 ```
 
-### Step 6: Create `public/js/bitterballen.js`
+---
 
-This script handles:
-- Loading and displaying the bitterballen index (thermometer progress bar)
-- Loading and displaying the member table with PRs and session stats
-- Populating the member and grade dropdowns
-- Submitting new climbs via POST
-- Refreshing the display after logging a climb
+## Step 7: Create `public/js/bitterballen.js`
 
-The thermometer can be a Bootstrap `progress-bar` styled vertically or a tall narrow `div` with a fill that goes from bottom to top. Use colour stops: red (0-33%), yellow (34-66%), green (67-100%).
+Full contents:
 
-The explanation text should describe the current state, e.g.:
-- 0%: "Nobody has climbed at their max yet. Get going!"
-- 1-49%: "Some effort, but the bitterballen are still frozen..."
-- 50-99%: "Getting warm! The bitterballen are almost ready!"
-- 100%: "BITTERBALLEN! Everyone crushed it!"
+```js
+// Load everything on page load
+document.addEventListener("DOMContentLoaded", () => {
+    loadClimbData();
+    loadDropdowns();
+    setupForm();
+});
 
-### Step 7: Verify
+async function loadClimbData() {
+    try {
+        const res = await fetch("/api/climbs/current");
+        const data = await res.json();
+
+        renderThermometer(data.bitterballen_index, data.target);
+        renderMemberStats(data.members);
+    } catch (err) {
+        console.error("Failed to load climb data:", err);
+    }
+}
+
+function renderThermometer(points, target) {
+    const bar = document.getElementById("thermometer");
+    const text = document.getElementById("indexText");
+
+    const percentage = Math.round((points / target) * 100);
+    // Bar fills to 100% max visually
+    const barWidth = Math.min(percentage, 100);
+
+    bar.style.width = barWidth + "%";
+    bar.textContent = percentage + "%";
+    bar.setAttribute("aria-valuenow", percentage);
+
+    // Colour stops
+    if (percentage > 100) {
+        bar.className = "progress-bar";
+        bar.style.backgroundColor = "#e91e8c";
+    } else if (percentage >= 67) {
+        bar.className = "progress-bar bg-success";
+        bar.style.backgroundColor = "";
+    } else if (percentage >= 34) {
+        bar.className = "progress-bar bg-warning";
+        bar.style.backgroundColor = "";
+    } else {
+        bar.className = "progress-bar bg-danger";
+        bar.style.backgroundColor = "";
+    }
+
+    // Explanation text
+    if (percentage === 0) {
+        text.textContent = "Nobody has climbed at their max yet. Get going!";
+    } else if (percentage < 50) {
+        text.textContent = "Some effort, but the bitterballen are still frozen...";
+    } else if (percentage < 100) {
+        text.textContent = "Getting warm! The bitterballen are almost ready!";
+    } else if (percentage === 100) {
+        text.textContent = "BITTERBALLEN! Everyone crushed it!";
+    } else {
+        text.textContent = "MEGA BITTERBALLEN! You animals went beyond!";
+    }
+}
+
+function renderMemberStats(members) {
+    const tbody = document.getElementById("memberStats");
+    tbody.innerHTML = "";
+
+    for (const m of members) {
+        let status = "-";
+        if (m.is_new_pr) {
+            status = "NEW PR!";
+        } else if (m.climbed_at_pr) {
+            status = "At PR";
+        } else if (m.session_climbs > 0) {
+            status = "Climbed";
+        }
+
+        const row = document.createElement("tr");
+        row.innerHTML = `
+            <td>${m.name}</td>
+            <td>${m.pr || "-"}</td>
+            <td>${m.session_climbs}</td>
+            <td>${m.session_high || "-"}</td>
+            <td>${status}</td>
+        `;
+        tbody.appendChild(row);
+    }
+}
+
+async function loadDropdowns() {
+    try {
+        // Load members
+        const membersRes = await fetch("/api/members");
+        const members = await membersRes.json();
+        const memberSelect = document.getElementById("climbMember");
+        for (const m of members) {
+            const opt = document.createElement("option");
+            opt.value = m.id;
+            opt.textContent = m.name;
+            memberSelect.appendChild(opt);
+        }
+
+        // Load grades
+        const gradesRes = await fetch("/api/grades");
+        const grades = await gradesRes.json();
+        const gradeSelect = document.getElementById("climbGrade");
+        for (const g of grades) {
+            const opt = document.createElement("option");
+            opt.value = g;
+            opt.textContent = g;
+            gradeSelect.appendChild(opt);
+        }
+
+        // Default date to today
+        const today = new Date().toISOString().split("T")[0];
+        document.getElementById("climbDate").value = today;
+    } catch (err) {
+        console.error("Failed to load dropdowns:", err);
+    }
+}
+
+function setupForm() {
+    const form = document.getElementById("climbForm");
+    form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+
+        const member_id = parseInt(document.getElementById("climbMember").value);
+        const grade = document.getElementById("climbGrade").value;
+        const climb_date = document.getElementById("climbDate").value;
+
+        if (!member_id || !grade) return;
+
+        try {
+            const res = await fetch("/api/climbs", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ member_id, grade, climb_date })
+            });
+
+            if (res.ok) {
+                // Refresh the data display
+                loadClimbData();
+                // Reset grade selection but keep member and date
+                document.getElementById("climbGrade").value = "";
+            } else {
+                const err = await res.json();
+                alert("Error: " + err.error);
+            }
+        } catch (err) {
+            console.error("Failed to log climb:", err);
+        }
+    });
+}
+```
+
+---
+
+## Step 8: Verify
 
 1. Run `npm run dev` and go to `http://localhost:3000/bitterballen`
-2. Log a few climbs for different members
-3. Check that PRs update correctly
-4. Check that the bitterballen index goes up when people climb at/above their PR
-5. Check that session data resets the display each Thursday (climbs before Thursday don't count for the current session)
-6. Verify the thermometer and explanation text update
+2. Confirm the page loads with the thermometer at 0% and the empty stats table
+3. Select a member and grade, click "Log Climb" — row should appear in the table
+4. Log climbs at or above a member's PR — thermometer should increase
+5. Confirm the status column shows "NEW PR!" / "At PR" / "Climbed" / "-" correctly
+6. Confirm the explanation text changes with the index value
+7. Wait for the next Thursday (or manually test by changing dates) to verify the weekly reset
