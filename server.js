@@ -405,6 +405,64 @@ app.get("/api/grades", (req, res) => {
     res.json(GRADES);
 });
 
+// Get per-member climb stats (last 12 months)
+app.get("/api/climbs/stats", async (req, res) => {
+    const memberId = parseInt(req.query.member_id);
+    if (!memberId) {
+        return res.status(400).json({ error: "member_id is required" });
+    }
+
+    try {
+        const result = await pool.query(
+            `SELECT to_char(climb_date, 'YYYY-MM') AS month,
+                    COUNT(*)::int AS route_count,
+                    MAX(grade_value) AS max_grade_value
+             FROM climbs
+             WHERE member_id = $1
+               AND climb_date >= (CURRENT_DATE - INTERVAL '12 months')
+             GROUP BY to_char(climb_date, 'YYYY-MM')
+             ORDER BY month ASC`,
+            [memberId]
+        );
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to fetch climb stats" });
+    }
+});
+
+// Get average of top 10 grades in the last 2 months
+app.get("/api/climbs/top-average", async (req, res) => {
+    const memberId = parseInt(req.query.member_id);
+    if (!memberId) {
+        return res.status(400).json({ error: "member_id is required" });
+    }
+
+    try {
+        const result = await pool.query(
+            `SELECT AVG(grade_value) AS avg_grade_value
+             FROM (
+                 SELECT grade_value
+                 FROM climbs
+                 WHERE member_id = $1
+                   AND climb_date >= (CURRENT_DATE - INTERVAL '2 months')
+                 ORDER BY grade_value DESC
+                 LIMIT 10
+             ) top10`,
+            [memberId]
+        );
+        const avg = result.rows[0].avg_grade_value;
+        res.json({ avg_grade_value: avg !== null ? parseFloat(avg) : null });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to fetch top average" });
+    }
+});
+
 app.get("/bitterballen", (req, res) => {
     res.sendFile(path.join(__dirname, "views", "bitterballen.html"));
+});
+
+app.get("/stats", (req, res) => {
+    res.sendFile(path.join(__dirname, "views", "stats.html"));
 });
