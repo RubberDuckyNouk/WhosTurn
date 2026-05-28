@@ -1,8 +1,11 @@
 require("dotenv").config();
 const { Pool } = require("pg");
 
+const isProduction = process.env.NODE_ENV === "production";
+
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
+    ssl: isProduction ? { rejectUnauthorized: false } : false,
 });
 
 async function initDatabase() {
@@ -33,6 +36,16 @@ async function initDatabase() {
             id SERIAL PRIMARY KEY,
             session_id INTEGER NOT NULL REFERENCES sessions(id),
             member_id INTEGER NOT NULL REFERENCES members(id)
+        )
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS climbs (
+            id SERIAL PRIMARY KEY,
+            member_id INTEGER NOT NULL REFERENCES members(id),
+            grade VARCHAR(10) NOT NULL,
+            grade_value INTEGER NOT NULL,
+            climb_date DATE NOT NULL DEFAULT CURRENT_DATE
         )
     `);
 
