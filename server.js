@@ -3,23 +3,25 @@ const path = require("path");
 const { pool, initDatabase } = require("./db/database");
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 
 // Live reload (development only)
-const livereload = require("livereload");
+if (process.env.NODE_ENV !== "production") {
+    const livereload = require("livereload");
 
-const liveReloadServer = livereload.createServer();
-liveReloadServer.watch([
-    path.join(__dirname, "public"),
-    path.join(__dirname, "views")
-]);
+    const liveReloadServer = livereload.createServer();
+    liveReloadServer.watch([
+        path.join(__dirname, "public"),
+        path.join(__dirname, "views")
+    ]);
 
-liveReloadServer.server.once("connection", () => {
-    setTimeout(() => {
-        liveReloadServer.refresh("/");
-    }, 100);
-});
+    liveReloadServer.server.once("connection", () => {
+        setTimeout(() => {
+            liveReloadServer.refresh("/");
+        }, 100);
+    });
+}
 
 // Climbing grade order (French bouldering scale, no + grades)
 const GRADES = [
