@@ -105,7 +105,7 @@ async function loadPayment() {
                 <div class="text-center mt-3">
                     <button class="btn btn-success record-btn" data-group="${groupNum}"
                             data-bs-toggle="modal" data-bs-target="#recordModal-${groupNum}">
-                        Record Session - ${groupName}
+                        Record Payment - ${groupName}
                     </button>
                     <div class="session-message-${groupNum} mt-2"></div>
                 </div>
@@ -117,7 +117,7 @@ async function loadPayment() {
                         <div class="modal-content">
                             <div class="modal-header">
                                 <h5 class="modal-title" id="recordModalLabel-${groupNum}">
-                                    Record Session - ${groupName}
+                                    Record Payment - ${groupName}
                                 </h5>
                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                             </div>
