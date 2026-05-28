@@ -128,6 +128,16 @@ async function loadPayment() {
                                            id="sessionDate-${groupNum}" data-group="${groupNum}"
                                            value="${new Date().toISOString().split("T")[0]}">
                                 </div>
+                                <div class="mb-3">
+                                    <label class="form-label" for="payer-${groupNum}">Who's paying?</label>
+                                    <select class="form-select payer-select" id="payer-${groupNum}" data-group="${groupNum}">
+                                        ${members.map(m => `
+                                            <option value="${m.id}" ${m.id === suggestedPayer.id ? "selected" : ""}>
+                                                ${m.name}
+                                            </option>
+                                        `).join("")}
+                                    </select>
+                                </div>
                                 <p class="text-muted">Uncheck absent members:</p>
                                 ${members.map(m => `
                                     <div class="form-check">
@@ -151,6 +161,26 @@ async function loadPayment() {
                 </div>
             `;
         }).join("");
+
+        // Keep payer dropdown in sync with attendance checkboxes
+        document.querySelectorAll(".form-check-input[class*='attendance-']").forEach(cb => {
+            cb.addEventListener("change", () => {
+                const groupNum = cb.className.match(/attendance-(\d+)/)[1];
+                const payerSelect = document.getElementById(`payer-${groupNum}`);
+                const checkedIds = Array.from(document.querySelectorAll(`.attendance-${groupNum}:checked`))
+                    .map(c => c.value);
+
+                // Disable options for absent members
+                Array.from(payerSelect.options).forEach(opt => {
+                    opt.disabled = !checkedIds.includes(opt.value);
+                });
+
+                // If current payer is unchecked, switch to first present member
+                if (!checkedIds.includes(payerSelect.value)) {
+                    payerSelect.value = checkedIds[0] || "";
+                }
+            });
+        });
 
         // Add event listeners to confirm buttons inside modals
         document.querySelectorAll(".confirm-record-btn").forEach(btn => {
@@ -177,14 +207,14 @@ async function recordSession(payGroup) {
         return;
     }
 
-    // Fetch current balances to find the suggested payer among present members
-    const response = await fetch("/api/payment");
-    const groups = await response.json();
-    const members = groups[payGroup];
+    const payerId = parseInt(document.getElementById(`payer-${payGroup}`).value);
+    const payerName = document.getElementById(`payer-${payGroup}`).selectedOptions[0].textContent.trim();
 
-    // Find the present member with the lowest balance (owes the most)
-    const presentMembers = members.filter(m => presentIds.includes(m.id));
-    const payer = presentMembers[0]; // Already sorted by lowest balance
+    if (!presentIds.includes(payerId)) {
+        const msgDiv = document.querySelector(`.session-message-${payGroup}`);
+        msgDiv.innerHTML = `<span class="text-danger">Payer must be present</span>`;
+        return;
+    }
 
     try {
         const result = await fetch("/api/sessions", {
@@ -192,7 +222,7 @@ async function recordSession(payGroup) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 pay_group: payGroup,
-                payer_id: payer.id,
+                payer_id: payerId,
                 present_ids: presentIds,
                 session_date: sessionDate
             }),
@@ -205,7 +235,7 @@ async function recordSession(payGroup) {
             // Close the modal
             const modal = bootstrap.Modal.getInstance(document.getElementById(`recordModal-${payGroup}`));
             if (modal) modal.hide();
-            msgDiv.innerHTML = `<span class="text-success">${payer.name} paid! ${data.message}</span>`;
+            msgDiv.innerHTML = `<span class="text-success">${payerName} paid! ${data.message}</span>`;
             loadDriving();
             loadPayment();
             loadHistory();
