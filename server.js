@@ -400,6 +400,39 @@ app.get("/api/climbs/current", async (req, res) => {
     }
 });
 
+// Get last 10 logged climbs
+app.get("/api/climbs/recent", async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT c.id, c.grade, c.climb_date, m.name AS member_name
+             FROM climbs c
+             JOIN members m ON c.member_id = m.id
+             ORDER BY c.id DESC
+             LIMIT 10`
+        );
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to fetch recent climbs" });
+    }
+});
+
+// Delete a climb
+app.delete("/api/climbs/:id", async (req, res) => {
+    const climbId = parseInt(req.params.id);
+
+    try {
+        const result = await pool.query("DELETE FROM climbs WHERE id = $1", [climbId]);
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: "Climb not found" });
+        }
+        res.json({ message: "Climb deleted" });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to delete climb" });
+    }
+});
+
 // Get available grades
 app.get("/api/grades", (req, res) => {
     res.json(GRADES);

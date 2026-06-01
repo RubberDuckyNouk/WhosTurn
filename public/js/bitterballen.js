@@ -3,6 +3,7 @@ document.addEventListener("DOMContentLoaded", () => {
     loadClimbData();
     loadDropdowns();
     setupForm();
+    loadRecentClimbs();
 });
 
 async function loadClimbData() {
@@ -144,6 +145,7 @@ function setupForm() {
                 // Refresh the data display
                 renderThermometer(data.bitterballen_index, data.target);
                 renderMemberStats(data.members);
+                loadRecentClimbs();
                 // Reset grade selection but keep member and date
                 document.getElementById("climbGrade").value = "";
             } else {
@@ -154,4 +156,53 @@ function setupForm() {
             console.error("Failed to log climb:", err);
         }
     });
+}
+
+async function loadRecentClimbs() {
+    try {
+        const res = await fetch("/api/climbs/recent");
+        const climbs = await res.json();
+        const container = document.getElementById("recentClimbs");
+
+        if (climbs.length === 0) {
+            container.innerHTML = `<p class="text-muted">No climbs logged yet.</p>`;
+            return;
+        }
+
+        container.innerHTML = `
+            <ul class="list-group list-group-flush">
+                ${climbs.map(c => {
+                    const date = new Date(c.climb_date).toLocaleDateString();
+                    return `
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span><strong>${c.member_name}</strong> — ${c.grade} <small class="text-muted">(${date})</small></span>
+                            <button class="btn btn-sm btn-outline-danger delete-climb-btn" data-id="${c.id}">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </li>
+                    `;
+                }).join("")}
+            </ul>
+        `;
+
+        container.querySelectorAll(".delete-climb-btn").forEach(btn => {
+            btn.addEventListener("click", () => deleteClimb(parseInt(btn.dataset.id)));
+        });
+    } catch (err) {
+        console.error("Failed to load recent climbs:", err);
+    }
+}
+
+async function deleteClimb(climbId) {
+    if (!confirm("Delete this climb?")) return;
+
+    try {
+        const res = await fetch(`/api/climbs/${climbId}`, { method: "DELETE" });
+        if (res.ok) {
+            loadRecentClimbs();
+            loadClimbData();
+        }
+    } catch (err) {
+        console.error("Failed to delete climb:", err);
+    }
 }
