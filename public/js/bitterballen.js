@@ -1,9 +1,26 @@
+function showConnectionError() {
+    if (document.getElementById("connectionError")) return;
+    const banner = document.createElement("div");
+    banner.id = "connectionError";
+    banner.className = "alert alert-danger text-center mb-0";
+    banner.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:9999;border-radius:0";
+    banner.innerHTML = 'Connection lost. <a href="" class="alert-link">Refresh the page</a>';
+    document.body.prepend(banner);
+}
+
 // Load everything on page load
 document.addEventListener("DOMContentLoaded", () => {
     loadClimbData();
     loadDropdowns();
     setupForm();
     loadRecentClimbs();
+    loadBitterballenOrders();
+
+    document.getElementById("orderBtn").addEventListener("click", orderBitterballen);
+    document.getElementById("orderModal").addEventListener("show.bs.modal", () => {
+        loadOrderForm();
+        document.getElementById("modalMessage").innerHTML = "";
+    });
 });
 
 async function loadClimbData() {
@@ -15,6 +32,7 @@ async function loadClimbData() {
         renderMemberStats(data.members);
     } catch (err) {
         console.error("Failed to load climb data:", err);
+        showConnectionError();
     }
 }
 
@@ -97,16 +115,7 @@ async function loadDropdowns() {
             memberSelect.appendChild(opt);
         }
 
-        // Load grades
-        const gradesRes = await fetch("/api/grades");
-        const grades = await gradesRes.json();
-        const gradeSelect = document.getElementById("climbGrade");
-        for (const g of grades) {
-            const opt = document.createElement("option");
-            opt.value = g;
-            opt.textContent = g;
-            gradeSelect.appendChild(opt);
-        }
+        // Grade dropdowns are static in HTML, no loading needed
 
         // Default date to today
         const today = new Date().toISOString().split("T")[0];
@@ -118,14 +127,25 @@ async function loadDropdowns() {
 
 function setupForm() {
     const form = document.getElementById("climbForm");
+    const submitBtn = document.getElementById("climbSubmitBtn");
+    const messageDiv = document.getElementById("climbMessage");
+
     form.addEventListener("submit", async (e) => {
         e.preventDefault();
 
         const member_id = parseInt(document.getElementById("climbMember").value);
-        const grade = document.getElementById("climbGrade").value;
+        const gradeNum = document.getElementById("climbGradeNum").value;
+        const gradeLetter = document.getElementById("climbGradeLetter").value;
+        const isPlus = document.getElementById("climbPlus").checked;
+        const grade = gradeNum + gradeLetter + (isPlus ? "+" : "");
         const climb_date = document.getElementById("climbDate").value;
 
-        if (!member_id || !grade) return;
+        if (!member_id || !gradeNum) return;
+
+        // Disable button to prevent double-clicks
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Logging...";
+        messageDiv.innerHTML = "";
 
         try {
             const res = await fetch("/api/climbs", {
@@ -147,13 +167,18 @@ function setupForm() {
                 renderMemberStats(data.members);
                 loadRecentClimbs();
                 // Reset grade selection but keep member and date
-                document.getElementById("climbGrade").value = "";
+                document.getElementById("climbGradeNum").value = "";
+                document.getElementById("climbPlus").checked = false;
             } else {
                 const err = await res.json();
-                alert("Error: " + err.error);
+                messageDiv.innerHTML = `<span class="text-danger">${err.error}</span>`;
             }
         } catch (err) {
             console.error("Failed to log climb:", err);
+            showConnectionError();
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = "Log Climb";
         }
     });
 }
@@ -204,5 +229,100 @@ async function deleteClimb(climbId) {
         }
     } catch (err) {
         console.error("Failed to delete climb:", err);
+    }
+}
+
+// Populate bitterballen order form (pre-select lowest balance)
+async function loadOrderForm() {
+    try {
+        const res = await fetch("/api/bitterballen-karma");
+        const members = await res.json();
+
+        document.getElementById("bitterballenPayer").innerHTML = members.map((m, i) =>
+            `<option value="${m.id}" ${i === 0 ? "selected" : ""}>${m.name}</option>`
+        ).join("");
+    } catch (err) {
+        console.error("Failed to load order form:", err);
+    }
+}
+
+// Load and display today's bitterballen orders
+async function loadBitterballenOrders() {
+    try {
+        const res = await fetch("/api/bitterballen-orders");
+        const orders = await res.json();
+        const container = document.getElementById("todaysOrders");
+
+        if (orders.length === 0) {
+            container.innerHTML = `<p class="text-muted">No orders yet today.</p>`;
+            return;
+        }
+
+        container.innerHTML = `
+            <ul class="list-group list-group-flush">
+                ${orders.map(o => `
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span><strong>${o.bitterballen_payer_name}</strong> ordered a portion of bitterballen</span>
+                        <button class="btn btn-sm btn-outline-danger delete-order-btn" data-id="${o.id}">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </li>
+                `).join("")}
+            </ul>
+        `;
+
+        container.querySelectorAll(".delete-order-btn").forEach(btn => {
+            btn.addEventListener("click", () => deleteBitterballenOrder(parseInt(btn.dataset.id)));
+        });
+    } catch (err) {
+        console.error("Failed to load bitterballen orders:", err);
+    }
+}
+
+// Order a portion of bitterballen
+async function orderBitterballen() {
+    const payerId = parseInt(document.getElementById("bitterballenPayer").value);
+    const today = new Date().toISOString().split("T")[0];
+
+    try {
+        const res = await fetch("/api/sessions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                session_date: today,
+                bitterballen_payer_id: payerId,
+                present_ids: [payerId]
+            })
+        });
+
+        if (res.ok) {
+            const modal = bootstrap.Modal.getInstance(document.getElementById("orderModal"));
+            if (modal) modal.hide();
+            document.getElementById("orderMessage").innerHTML =
+                `<span class="text-success">Order recorded!</span>`;
+            loadBitterballenOrders();
+        } else {
+            const data = await res.json();
+            document.getElementById("modalMessage").innerHTML =
+                `<span class="text-danger">${data.error}</span>`;
+        }
+    } catch (err) {
+        console.error("Failed to order bitterballen:", err);
+    }
+}
+
+// Delete a bitterballen order
+async function deleteBitterballenOrder(sessionId) {
+    if (!confirm("Delete this order and reverse the balance changes?")) return;
+
+    try {
+        const res = await fetch(`/api/sessions/${sessionId}`, { method: "DELETE" });
+        if (res.ok) {
+            loadBitterballenOrders();
+            loadOrderForm();
+            loadClimbData();
+        }
+    } catch (err) {
+        console.error("Failed to delete bitterballen order:", err);
     }
 }

@@ -70,6 +70,8 @@ async function initDatabase() {
     await pool.query(`ALTER TABLE members ADD COLUMN IF NOT EXISTS is_current_driver BOOLEAN NOT NULL DEFAULT false`);
     await pool.query(`ALTER TABLE session_attendance ADD COLUMN IF NOT EXISTS beer_count INTEGER NOT NULL DEFAULT 0`);
     await pool.query(`ALTER TABLE members DROP COLUMN IF EXISTS drive_balance`);
+    await pool.query(`ALTER TABLE members ADD COLUMN IF NOT EXISTS bitterballen_balance INTEGER NOT NULL DEFAULT 0`);
+    await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS bitterballen_payer_id INTEGER REFERENCES members(id)`);
 
     // Make payer_id nullable (sessions can be driving-only)
     await pool.query(`ALTER TABLE sessions ALTER COLUMN payer_id DROP NOT NULL`);
