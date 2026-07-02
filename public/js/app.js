@@ -1,4 +1,14 @@
 
+function showConnectionError() {
+    if (document.getElementById("connectionError")) return;
+    const banner = document.createElement("div");
+    banner.id = "connectionError";
+    banner.className = "alert alert-danger text-center mb-0";
+    banner.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:9999;border-radius:0";
+    banner.innerHTML = 'Connection lost. <a href="" class="alert-link">Refresh the page</a>';
+    document.body.prepend(banner);
+}
+
 // Car icon colours per driver
 const carColors = { "Nouk": "red" };
 const defaultCarColor = "grey";
@@ -23,33 +33,55 @@ async function loadDriving() {
         }
     } catch (err) {
         console.error("Failed to load driving data:", err);
+        showConnectionError();
     }
 }
 
-// Load beer payment section (balance-based, flat list)
-async function loadPayment() {
+// Load combined karma card (beer + bitterballen balances per member)
+async function loadKarma() {
     try {
-        const response = await fetch("/api/payment");
-        const members = await response.json();
+        const [beerRes, bitterRes] = await Promise.all([
+            fetch("/api/payment"),
+            fetch("/api/bitterballen-karma")
+        ]);
+        const beerMembers = await beerRes.json();
+        const bitterMembers = await bitterRes.json();
 
+        // Suggested payer
         const suggestedPayer = document.getElementById("suggestedPayer");
-        if (members.length > 0) {
-            suggestedPayer.textContent = members[0].name;
+        if (beerMembers.length > 0) {
+            suggestedPayer.textContent = beerMembers[0].name;
         } else {
             suggestedPayer.textContent = "No members set";
         }
 
-        const balances = document.getElementById("beerBalances");
-        balances.innerHTML = members.map(m => `
-            <li class="list-group-item d-flex justify-content-between align-items-center">
-                ${m.name}
-                <span class="badge ${m.beer_balance < 0 ? "bg-danger" : m.beer_balance > 0 ? "bg-success" : "bg-secondary"}">
-                    ${m.beer_balance > 0 ? "+" : ""}${m.beer_balance}
-                </span>
-            </li>
-        `).join("");
+        // Build lookup for bitterballen balances
+        const bitterMap = {};
+        for (const m of bitterMembers) {
+            bitterMap[m.id] = m.bitterballen_balance;
+        }
+
+        const list = document.getElementById("karmaList");
+        list.innerHTML = beerMembers.map(m => {
+            const bb = bitterMap[m.id];
+            const hasBitter = bb !== undefined;
+            function badge(val) {
+                const cls = val < 0 ? "bg-danger" : val > 0 ? "bg-success" : "bg-secondary";
+                return `<span class="badge ${cls}">${val > 0 ? "+" : ""}${val}</span>`;
+            }
+            return `
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    ${m.name}
+                    <span>
+                        <i class="bi bi-cup-straw me-1"></i>${badge(m.beer_balance)}${hasBitter ? `
+                        <i class="bi bi-circle-fill ms-2 me-1"></i>${badge(bb)}` : ""}
+                    </span>
+                </li>
+            `;
+        }).join("");
     } catch (err) {
-        console.error("Failed to load payment data:", err);
+        console.error("Failed to load karma:", err);
+        showConnectionError();
     }
 }
 
@@ -186,7 +218,7 @@ async function recordBeer() {
             const modal = bootstrap.Modal.getInstance(document.getElementById("beerModal"));
             if (modal) modal.hide();
             showMessage("Beer payment recorded!", "success", "sessionMessage");
-            loadPayment();
+            loadKarma();
             loadHistory();
         } else {
             const data = await result.json();
@@ -227,6 +259,7 @@ async function loadHistory() {
                     if (s.beer_details && s.beer_details.length > 0) {
                         details.push(`Beers: ${s.beer_details.join(", ")}`);
                     }
+                    if (s.bitterballen_payer_name) details.push(`Bitterballen: ${s.bitterballen_payer_name}`);
 
                     return `
                         <li class="list-group-item">
@@ -253,6 +286,7 @@ async function loadHistory() {
         });
     } catch (err) {
         console.error("Failed to load session history:", err);
+        showConnectionError();
     }
 }
 
@@ -294,7 +328,7 @@ async function deleteSession(sessionId) {
         if (result.ok) {
             loadHistory();
             loadDriving();
-            loadPayment();
+            loadKarma();
         }
     } catch (err) {
         console.error("Failed to delete session:", err);
@@ -318,5 +352,5 @@ document.getElementById("beerModal").addEventListener("show.bs.modal", () => {
 
 // Load data on page ready
 loadDriving();
-loadPayment();
+loadKarma();
 loadHistory();

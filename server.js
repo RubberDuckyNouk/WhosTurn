@@ -27,14 +27,14 @@ if (process.env.NODE_ENV !== "production") {
     });
 }
 
-// Climbing grade order (French bouldering scale, no + grades)
+// Climbing grade order (French bouldering scale, with + grades)
 const GRADES = [
-    "3a", "3b", "3c",
-    "4a", "4b", "4c",
-    "5a", "5b", "5c",
-    "6a", "6b", "6c",
-    "7a", "7b", "7c",
-    "8a", "8b"
+    "3a", "3a+", "3b", "3b+", "3c", "3c+",
+    "4a", "4a+", "4b", "4b+", "4c", "4c+",
+    "5a", "5a+", "5b", "5b+", "5c", "5c+",
+    "6a", "6a+", "6b", "6b+", "6c", "6c+",
+    "7a", "7a+", "7b", "7b+", "7c", "7c+",
+    "8a", "8a+", "8b", "8b+"
 ];
 
 // Enable JSON parsing
@@ -100,12 +100,25 @@ app.get("/api/payment", async (req, res) => {
     }
 });
 
+// Get beer members sorted by bitterballen balance (lowest = should pay next)
+app.get("/api/bitterballen-karma", async (req, res) => {
+    try {
+        const result = await pool.query(
+            "SELECT * FROM members WHERE beer = true ORDER BY bitterballen_balance ASC, name"
+        );
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to fetch bitterballen karma data" });
+    }
+});
+
 // Record a session
 app.post("/api/sessions", async (req, res) => {
-    const { session_date, driver_id, payer_id, beer_counts, present_ids } = req.body;
+    const { session_date, driver_id, payer_id, beer_counts, present_ids, bitterballen_payer_id } = req.body;
 
-    if (!driver_id && !payer_id) {
-        return res.status(400).json({ error: "Must record driving or beer payment (or both)" });
+    if (!driver_id && !payer_id && !bitterballen_payer_id) {
+        return res.status(400).json({ error: "Must record driving, beer payment, or bitterballen payment" });
     }
     if (!present_ids || present_ids.length === 0) {
         return res.status(400).json({ error: "At least one person must be present" });
@@ -114,8 +127,8 @@ app.post("/api/sessions", async (req, res) => {
     try {
         // Insert session
         const sessionResult = await pool.query(
-            "INSERT INTO sessions (session_date, driver_id, payer_id) VALUES ($1, $2, $3) RETURNING id",
-            [session_date || new Date(), driver_id || null, payer_id || null]
+            "INSERT INTO sessions (session_date, driver_id, payer_id, bitterballen_payer_id) VALUES ($1, $2, $3, $4) RETURNING id",
+            [session_date || new Date(), driver_id || null, payer_id || null, bitterballen_payer_id || null]
         );
         const sessionId = sessionResult.rows[0].id;
 
@@ -202,6 +215,28 @@ app.post("/api/sessions", async (req, res) => {
             }
         }
 
+        // Update bitterballen balances (equal split among beer group)
+        if (bitterballen_payer_id) {
+            const beerMembers = await pool.query("SELECT id FROM members WHERE beer = true");
+            const allIds = beerMembers.rows.map(r => r.id);
+            const otherCount = allIds.filter(id => id !== bitterballen_payer_id).length;
+
+            if (otherCount > 0) {
+                await pool.query(
+                    "UPDATE members SET bitterballen_balance = bitterballen_balance + $1 WHERE id = $2",
+                    [otherCount, bitterballen_payer_id]
+                );
+                for (const id of allIds) {
+                    if (id !== bitterballen_payer_id) {
+                        await pool.query(
+                            "UPDATE members SET bitterballen_balance = bitterballen_balance - 1 WHERE id = $1",
+                            [id]
+                        );
+                    }
+                }
+            }
+        }
+
         res.status(201).json({ message: "Session recorded" });
     } catch (err) {
         console.error(err);
@@ -229,10 +264,12 @@ app.get("/api/sessions", async (req, res) => {
 
         const result = await pool.query(
             `SELECT s.id, s.session_date,
-                    p.name AS payer_name, d.name AS driver_name
+                    p.name AS payer_name, d.name AS driver_name,
+                    bp.name AS bitterballen_payer_name
              FROM sessions s
              LEFT JOIN members p ON s.payer_id = p.id
              LEFT JOIN members d ON s.driver_id = d.id
+             LEFT JOIN members bp ON s.bitterballen_payer_id = bp.id
              WHERE ${dateCondition}
              ORDER BY s.session_date DESC, s.id DESC`,
             params
@@ -274,7 +311,7 @@ app.delete("/api/sessions/:id", async (req, res) => {
             return res.status(404).json({ error: "Session not found" });
         }
 
-        const { payer_id, driver_id } = session.rows[0];
+        const { payer_id, driver_id, bitterballen_payer_id } = session.rows[0];
 
         // Get attendance with beer counts
         const attendance = await pool.query(
@@ -302,6 +339,28 @@ app.delete("/api/sessions/:id", async (req, res) => {
                         "UPDATE members SET beer_balance = beer_balance + $1 WHERE id = $2",
                         [a.beer_count, a.member_id]
                     );
+                }
+            }
+        }
+
+        // Reverse bitterballen balance changes
+        if (bitterballen_payer_id) {
+            const beerMembers = await pool.query("SELECT id FROM members WHERE beer = true");
+            const allIds = beerMembers.rows.map(r => r.id);
+            const otherCount = allIds.filter(id => id !== bitterballen_payer_id).length;
+
+            if (otherCount > 0) {
+                await pool.query(
+                    "UPDATE members SET bitterballen_balance = bitterballen_balance - $1 WHERE id = $2",
+                    [otherCount, bitterballen_payer_id]
+                );
+                for (const id of allIds) {
+                    if (id !== bitterballen_payer_id) {
+                        await pool.query(
+                            "UPDATE members SET bitterballen_balance = bitterballen_balance + 1 WHERE id = $1",
+                            [id]
+                        );
+                    }
                 }
             }
         }
@@ -597,7 +656,7 @@ app.delete("/api/members/:id", async (req, res) => {
             [memberId]
         );
         const driverRef = await pool.query(
-            "SELECT COUNT(*) FROM sessions WHERE driver_id = $1 OR payer_id = $1",
+            "SELECT COUNT(*) FROM sessions WHERE driver_id = $1 OR payer_id = $1 OR bitterballen_payer_id = $1",
             [memberId]
         );
         const climbRef = await pool.query(
@@ -621,6 +680,23 @@ app.delete("/api/members/:id", async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Failed to delete member" });
+    }
+});
+
+// Get today's bitterballen orders
+app.get("/api/bitterballen-orders", async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT s.id, s.session_date, bp.name AS bitterballen_payer_name
+             FROM sessions s
+             JOIN members bp ON s.bitterballen_payer_id = bp.id
+             WHERE s.session_date = CURRENT_DATE
+             ORDER BY s.id DESC`
+        );
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to fetch bitterballen orders" });
     }
 });
 
