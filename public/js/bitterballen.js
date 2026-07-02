@@ -87,7 +87,7 @@ function renderMemberStats(members) {
 async function loadDropdowns() {
     try {
         // Load members
-        const membersRes = await fetch("/api/members");
+        const membersRes = await fetch("/api/members?bitterballen=true");
         const members = await membersRes.json();
         const memberSelect = document.getElementById("climbMember");
         for (const m of members) {

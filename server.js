@@ -1,3 +1,7 @@
+const session = require("express-session");
+const pgSession = require("connect-pg-simple")(session);
+const bcrypt = require("bcrypt");
+
 const express = require("express");
 const path = require("path");
 const { pool, initDatabase } = require("./db/database");
@@ -52,10 +56,17 @@ initDatabase().then(() => {
     });
 });
 
-// Get all members
+// Get all members (optional filters: ?carpool=true, ?beer=true, ?bitterballen=true)
 app.get("/api/members", async (req, res) => {
     try {
-        const result = await pool.query("SELECT * FROM members ORDER BY name");
+        let query = "SELECT * FROM members";
+        const conditions = [];
+        if (req.query.carpool === "true") conditions.push("carpool = true");
+        if (req.query.beer === "true") conditions.push("beer = true");
+        if (req.query.bitterballen === "true") conditions.push("bitterballen = true");
+        if (conditions.length > 0) query += " WHERE " + conditions.join(" AND ");
+        query += " ORDER BY name";
+        const result = await pool.query(query);
         res.json(result.rows);
     } catch (err) {
         console.error(err);
@@ -63,36 +74,26 @@ app.get("/api/members", async (req, res) => {
     }
 });
 
-// Get driving rotation
+// Get carpool members with rotation info
 app.get("/api/driving", async (req, res) => {
     try {
         const result = await pool.query(
-            "SELECT * FROM members WHERE in_carpool = true ORDER BY drive_order"
+            "SELECT * FROM members WHERE carpool = true ORDER BY drive_order"
         );
         res.json(result.rows);
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: "Failed to fetch driving rotation" });
+        res.status(500).json({ error: "Failed to fetch driving data" });
     }
 });
 
-// Get payment balances (per group)
+// Get beer members sorted by beer balance (lowest = should pay next)
 app.get("/api/payment", async (req, res) => {
     try {
         const result = await pool.query(
-            "SELECT * FROM members WHERE pay_group IS NOT NULL ORDER BY pay_group, pay_balance ASC, name"
+            "SELECT * FROM members WHERE beer = true ORDER BY beer_balance ASC, name"
         );
-
-        // Group members by pay_group
-        const groups = {};
-        result.rows.forEach(member => {
-            if (!groups[member.pay_group]) {
-                groups[member.pay_group] = [];
-            }
-            groups[member.pay_group].push(member);
-        });
-
-        res.json(groups);
+        res.json(result.rows);
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Failed to fetch payment data" });
@@ -101,74 +102,103 @@ app.get("/api/payment", async (req, res) => {
 
 // Record a session
 app.post("/api/sessions", async (req, res) => {
-    const { pay_group, payer_id, present_ids, session_date } = req.body;
+    const { session_date, driver_id, payer_id, beer_counts, present_ids } = req.body;
 
-    if (!pay_group || !payer_id || !present_ids || present_ids.length === 0) {
-        return res.status(400).json({ error: "Missing required fields" });
+    if (!driver_id && !payer_id) {
+        return res.status(400).json({ error: "Must record driving or beer payment (or both)" });
+    }
+    if (!present_ids || present_ids.length === 0) {
+        return res.status(400).json({ error: "At least one person must be present" });
     }
 
     try {
-        // Record the session
-        const driverResult = await pool.query(
-            "SELECT * FROM members WHERE is_current_driver = true"
-        );
-        const currentDriver = driverResult.rows[0] || null;
-
+        // Insert session
         const sessionResult = await pool.query(
-            "INSERT INTO sessions (session_date, driver_id, payer_id, pay_group) VALUES ($1, $2, $3, $4) RETURNING id",
-            [session_date || new Date(), currentDriver ? currentDriver.id : null, payer_id, pay_group]
+            "INSERT INTO sessions (session_date, driver_id, payer_id) VALUES ($1, $2, $3) RETURNING id",
+            [session_date || new Date(), driver_id || null, payer_id || null]
         );
         const sessionId = sessionResult.rows[0].id;
 
-        // Record attendance
+        // Record attendance with beer counts
         for (const memberId of present_ids) {
+            const beerCount = (beer_counts && beer_counts[memberId]) ? beer_counts[memberId] : 0;
             await pool.query(
-                "INSERT INTO session_attendance (session_id, member_id) VALUES ($1, $2)",
-                [sessionId, memberId]
+                "INSERT INTO session_attendance (session_id, member_id, beer_count) VALUES ($1, $2, $3)",
+                [sessionId, memberId, beerCount]
             );
         }
 
-        // Update balances: payer gets +N (one per person paid for), others get -1
-        const otherPresent = present_ids.filter(id => id !== payer_id);
-        await pool.query(
-            "UPDATE members SET pay_balance = pay_balance + $1 WHERE id = $2",
-            [otherPresent.length, payer_id]
-        );
-        if (otherPresent.length > 0) {
-            await pool.query(
-                `UPDATE members SET pay_balance = pay_balance - 1
-                 WHERE id = ANY($1)`,
-                [otherPresent]
+        // Update driving rotation
+        if (driver_id) {
+            // Find who was supposed to drive: skipped member first, otherwise current driver
+            const skippedResult = await pool.query(
+                "SELECT id FROM members WHERE carpool = true AND drive_skipped = true LIMIT 1"
             );
+            const currentResult = await pool.query(
+                "SELECT id, drive_order FROM members WHERE is_current_driver = true LIMIT 1"
+            );
+
+            const suggestedId = skippedResult.rows.length > 0
+                ? skippedResult.rows[0].id
+                : (currentResult.rows[0]?.id || null);
+
+            const suggestedWasCurrent = currentResult.rows.length > 0
+                && currentResult.rows[0].id === suggestedId;
+
+            if (driver_id !== suggestedId && suggestedId) {
+                // Someone else drove — mark the suggested driver as skipped (capped at 1)
+                await pool.query(
+                    "UPDATE members SET drive_skipped = true WHERE id = $1",
+                    [suggestedId]
+                );
+            }
+
+            // If the actual driver was skipped, clear it
+            await pool.query(
+                "UPDATE members SET drive_skipped = false WHERE id = $1",
+                [driver_id]
+            );
+
+            // Advance rotation if the suggested driver was the current rotation driver
+            if (suggestedWasCurrent) {
+                await pool.query("UPDATE members SET is_current_driver = false WHERE is_current_driver = true");
+                const nextDriver = await pool.query(
+                    `SELECT id FROM members
+                     WHERE carpool = true AND drive_order > $1
+                     ORDER BY drive_order LIMIT 1`,
+                    [currentResult.rows[0].drive_order]
+                );
+                if (nextDriver.rows.length > 0) {
+                    await pool.query("UPDATE members SET is_current_driver = true WHERE id = $1", [nextDriver.rows[0].id]);
+                } else {
+                    await pool.query(
+                        `UPDATE members SET is_current_driver = true
+                         WHERE id = (SELECT id FROM members WHERE carpool = true ORDER BY drive_order LIMIT 1)`
+                    );
+                }
+            }
         }
 
-        // Advance driving rotation (only when group 1 records)
-        if (pay_group === 1 && currentDriver) {
-            await pool.query(
-                "UPDATE members SET is_current_driver = false WHERE is_current_driver = true"
-            );
+        // Update beer balances (weighted by beer count)
+        if (payer_id && beer_counts) {
+            const totalOtherBeers = Object.entries(beer_counts)
+                .filter(([id]) => parseInt(id) !== payer_id)
+                .reduce((sum, [, count]) => sum + count, 0);
 
-            const nextDriver = await pool.query(
-                `SELECT * FROM members
-                 WHERE in_carpool = true AND drive_order > $1
-                 ORDER BY drive_order LIMIT 1`,
-                [currentDriver.drive_order]
-            );
+            if (totalOtherBeers > 0) {
+                await pool.query(
+                    "UPDATE members SET beer_balance = beer_balance + $1 WHERE id = $2",
+                    [totalOtherBeers, payer_id]
+                );
+            }
 
-            if (nextDriver.rows.length > 0) {
-                await pool.query(
-                    "UPDATE members SET is_current_driver = true WHERE id = $1",
-                    [nextDriver.rows[0].id]
-                );
-            } else {
-                await pool.query(
-                    `UPDATE members SET is_current_driver = true
-                     WHERE id = (
-                         SELECT id FROM members
-                         WHERE in_carpool = true
-                         ORDER BY drive_order LIMIT 1
-                     )`
-                );
+            for (const [memberId, count] of Object.entries(beer_counts)) {
+                if (parseInt(memberId) !== payer_id && count > 0) {
+                    await pool.query(
+                        "UPDATE members SET beer_balance = beer_balance - $1 WHERE id = $2",
+                        [count, parseInt(memberId)]
+                    );
+                }
             }
         }
 
@@ -198,21 +228,21 @@ app.get("/api/sessions", async (req, res) => {
         }
 
         const result = await pool.query(
-            `SELECT s.id, s.session_date, s.pay_group,
+            `SELECT s.id, s.session_date,
                     p.name AS payer_name, d.name AS driver_name
              FROM sessions s
-             JOIN members p ON s.payer_id = p.id
+             LEFT JOIN members p ON s.payer_id = p.id
              LEFT JOIN members d ON s.driver_id = d.id
              WHERE ${dateCondition}
              ORDER BY s.session_date DESC, s.id DESC`,
             params
         );
 
-        // Get attendance for each session
+        // Get attendance for each session (includes beer counts)
         const sessions = [];
         for (const row of result.rows) {
             const attendance = await pool.query(
-                `SELECT m.name FROM session_attendance sa
+                `SELECT m.name, sa.beer_count FROM session_attendance sa
                  JOIN members m ON sa.member_id = m.id
                  WHERE sa.session_id = $1
                  ORDER BY m.name`,
@@ -220,7 +250,10 @@ app.get("/api/sessions", async (req, res) => {
             );
             sessions.push({
                 ...row,
-                present: attendance.rows.map(a => a.name)
+                present: attendance.rows.map(a => a.name),
+                beer_details: attendance.rows
+                    .filter(a => a.beer_count > 0)
+                    .map(a => `${a.name}(${a.beer_count})`)
             });
         }
 
@@ -236,49 +269,48 @@ app.delete("/api/sessions/:id", async (req, res) => {
     const sessionId = parseInt(req.params.id);
 
     try {
-        // Get the session details
-        const session = await pool.query(
-            "SELECT * FROM sessions WHERE id = $1",
-            [sessionId]
-        );
-
+        const session = await pool.query("SELECT * FROM sessions WHERE id = $1", [sessionId]);
         if (session.rows.length === 0) {
             return res.status(404).json({ error: "Session not found" });
         }
 
-        const { payer_id } = session.rows[0];
+        const { payer_id, driver_id } = session.rows[0];
 
-        // Get who was present
+        // Get attendance with beer counts
         const attendance = await pool.query(
-            "SELECT member_id FROM session_attendance WHERE session_id = $1",
+            "SELECT member_id, beer_count FROM session_attendance WHERE session_id = $1",
             [sessionId]
         );
-        const presentIds = attendance.rows.map(r => r.member_id);
-        const otherPresent = presentIds.filter(id => id !== payer_id);
+        const attendees = attendance.rows;
 
-        // Reverse balance changes: payer loses the points they gained
-        await pool.query(
-            "UPDATE members SET pay_balance = pay_balance - $1 WHERE id = $2",
-            [otherPresent.length, payer_id]
-        );
+        // Reverse beer balance changes
+        if (payer_id) {
+            const totalOtherBeers = attendees
+                .filter(a => a.member_id !== payer_id)
+                .reduce((sum, a) => sum + a.beer_count, 0);
 
-        // Others gain back their -1
-        if (otherPresent.length > 0) {
-            await pool.query(
-                "UPDATE members SET pay_balance = pay_balance + 1 WHERE id = ANY($1)",
-                [otherPresent]
-            );
+            if (totalOtherBeers > 0) {
+                await pool.query(
+                    "UPDATE members SET beer_balance = beer_balance - $1 WHERE id = $2",
+                    [totalOtherBeers, payer_id]
+                );
+            }
+
+            for (const a of attendees) {
+                if (a.member_id !== payer_id && a.beer_count > 0) {
+                    await pool.query(
+                        "UPDATE members SET beer_balance = beer_balance + $1 WHERE id = $2",
+                        [a.beer_count, a.member_id]
+                    );
+                }
+            }
         }
 
+        // Note: driving rotation state is not reversed on delete
+
         // Delete attendance records, then the session
-        await pool.query(
-            "DELETE FROM session_attendance WHERE session_id = $1",
-            [sessionId]
-        );
-        await pool.query(
-            "DELETE FROM sessions WHERE id = $1",
-            [sessionId]
-        );
+        await pool.query("DELETE FROM session_attendance WHERE session_id = $1", [sessionId]);
+        await pool.query("DELETE FROM sessions WHERE id = $1", [sessionId]);
 
         res.json({ message: "Session deleted and balances reversed" });
     } catch (err) {
@@ -319,8 +351,8 @@ app.get("/api/climbs/current", async (req, res) => {
         lastThursday.setDate(now.getDate() - daysSinceThursday);
         lastThursday.setHours(0, 0, 0, 0);
 
-        // Get all members
-        const membersResult = await pool.query("SELECT id, name FROM members ORDER BY name");
+        // Get bitterballen-participating members
+        const membersResult = await pool.query("SELECT id, name FROM members WHERE bitterballen = true ORDER BY name");
         const members = membersResult.rows;
 
         // Get PRs for each member (all-time highest grade BEFORE this session)
@@ -492,10 +524,114 @@ app.get("/api/climbs/top-average", async (req, res) => {
     }
 });
 
+// Create a member
+app.post("/api/members", async (req, res) => {
+    const { name, carpool, beer, bitterballen } = req.body;
+    if (!name || !name.trim()) {
+        return res.status(400).json({ error: "Name is required" });
+    }
+
+    try {
+        let driveOrder = null;
+        if (carpool) {
+            const maxOrder = await pool.query("SELECT COALESCE(MAX(drive_order), 0) + 1 AS next FROM members WHERE carpool = true");
+            driveOrder = maxOrder.rows[0].next;
+        }
+
+        const result = await pool.query(
+            `INSERT INTO members (name, carpool, beer, bitterballen, drive_order)
+             VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+            [name.trim(), !!carpool, !!beer, !!bitterballen, driveOrder]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to create member" });
+    }
+});
+
+// Update a member
+app.put("/api/members/:id", async (req, res) => {
+    const memberId = parseInt(req.params.id);
+    const { name, carpool, beer, bitterballen } = req.body;
+    if (!name || !name.trim()) {
+        return res.status(400).json({ error: "Name is required" });
+    }
+
+    try {
+        // If carpool is being enabled and member has no drive_order, assign one
+        let driveOrderUpdate = "";
+        let params = [name.trim(), !!carpool, !!beer, !!bitterballen, memberId];
+        if (carpool) {
+            const current = await pool.query("SELECT drive_order FROM members WHERE id = $1", [memberId]);
+            if (!current.rows[0]?.drive_order) {
+                const maxOrder = await pool.query("SELECT COALESCE(MAX(drive_order), 0) + 1 AS next FROM members WHERE carpool = true");
+                driveOrderUpdate = ", drive_order = $6";
+                params.push(maxOrder.rows[0].next);
+            }
+        }
+
+        const result = await pool.query(
+            `UPDATE members SET name = $1, carpool = $2, beer = $3, bitterballen = $4${driveOrderUpdate}
+             WHERE id = $5 RETURNING *`,
+            params
+        );
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: "Member not found" });
+        }
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to update member" });
+    }
+});
+
+// Delete a member
+app.delete("/api/members/:id", async (req, res) => {
+    const memberId = parseInt(req.params.id);
+
+    try {
+        // Check for references in sessions or climbs
+        const sessionRef = await pool.query(
+            "SELECT COUNT(*) FROM session_attendance WHERE member_id = $1",
+            [memberId]
+        );
+        const driverRef = await pool.query(
+            "SELECT COUNT(*) FROM sessions WHERE driver_id = $1 OR payer_id = $1",
+            [memberId]
+        );
+        const climbRef = await pool.query(
+            "SELECT COUNT(*) FROM climbs WHERE member_id = $1",
+            [memberId]
+        );
+
+        const total = parseInt(sessionRef.rows[0].count) +
+                       parseInt(driverRef.rows[0].count) +
+                       parseInt(climbRef.rows[0].count);
+
+        if (total > 0) {
+            return res.status(400).json({ error: "Cannot delete member with existing session or climb history" });
+        }
+
+        const result = await pool.query("DELETE FROM members WHERE id = $1", [memberId]);
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: "Member not found" });
+        }
+        res.json({ message: "Member deleted" });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to delete member" });
+    }
+});
+
 app.get("/bitterballen", (req, res) => {
     res.sendFile(path.join(__dirname, "views", "bitterballen.html"));
 });
 
 app.get("/stats", (req, res) => {
     res.sendFile(path.join(__dirname, "views", "stats.html"));
+});
+
+app.get("/settings", (req, res) => {
+    res.sendFile(path.join(__dirname, "views", "settings.html"));
 });

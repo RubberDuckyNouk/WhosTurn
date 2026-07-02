@@ -39,10 +39,13 @@
                         <a class="nav-link active" href="/">Home</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/bitterballen">Bitterballen</a>
+                        <a class="nav-link" href="/bitterballen">Climbing</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="/stats">Stats</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/settings">Settings</a>
                     </li>
                 </ul>
             </div>
@@ -53,17 +56,103 @@
         <h1>Whose turn is it?</h1>
         <p>Welcome to the climbing group turn tracker.</p>
 
-        <!-- Current Driver -->
-        <div class="card mt-4">
-            <div class="card-body text-center">
-                <h5 class="card-title">Driving This Week</h5>
-                <p class="display-6" id="currentDriver">Loading...</p>
+        <!-- Suggested next driver + payer -->
+        <div class="row mt-4">
+            <div class="col-md-6 mb-3">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <h5 class="card-title"><i class="bi bi-car-front-fill me-2"></i>Next to Drive</h5>
+                        <p class="display-6" id="suggestedDriver">Loading...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 mb-3">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <h5 class="card-title"><i class="bi bi-cup-straw me-2"></i>Next to Pay</h5>
+                        <p class="display-6" id="suggestedPayer">Loading...</p>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Payment Groups -->
-        <div id="paymentGroups">
-            <!-- Payment groups loaded by JavaScript -->
+        <!-- Record Buttons -->
+        <div class="d-flex justify-content-center gap-2 mb-3">
+            <button class="btn btn-success btn-lg" data-bs-toggle="modal" data-bs-target="#driveModal">
+                <i class="bi bi-car-front-fill me-2"></i>Record Drive
+            </button>
+            <button class="btn btn-success btn-lg" data-bs-toggle="modal" data-bs-target="#beerModal">
+                <i class="bi bi-cup-straw me-2"></i>Record Beer
+            </button>
+        </div>
+        <div id="sessionMessage" class="text-center mb-3"></div>
+
+        <!-- Beer Karma -->
+        <div class="row">
+            <div class="col-md-6 mx-auto mb-3">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">Beer Karma</h5>
+                        <ul class="list-group list-group-flush" id="beerBalances"></ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Drive Modal -->
+        <div class="modal fade" id="driveModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Record Drive</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label" for="driveDate">Date</label>
+                            <input type="date" class="form-control" id="driveDate">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="driverSelect">Who drove?</label>
+                            <select class="form-select" id="driverSelect"></select>
+                        </div>
+                    </div>
+                    <div id="driveMessage" class="mx-3"></div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-success" id="confirmDrive">Confirm</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Beer Modal -->
+        <div class="modal fade" id="beerModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Record Beer Payment</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label" for="beerDate">Date</label>
+                            <input type="date" class="form-control" id="beerDate">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="payerSelect">Who paid?</label>
+                            <select class="form-select" id="payerSelect"></select>
+                        </div>
+                        <label class="form-label fw-bold">Beers per person:</label>
+                        <div id="beerCounts" class="mb-3"></div>
+                    </div>
+                    <div id="beerMessage" class="mx-3"></div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-success" id="confirmBeer">Confirm</button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Session History -->
@@ -75,9 +164,7 @@
                     <button class="btn btn-sm btn-outline-primary history-filter" data-filter="month">This Month</button>
                     <input type="month" class="form-control form-control-sm" id="historyMonth" style="width: auto;">
                 </div>
-                <div id="sessionHistory">
-                    <!-- Loaded by JavaScript -->
-                </div>
+                <div id="sessionHistory"></div>
             </div>
         </div>
 
@@ -96,9 +183,9 @@
                class=" me-3 fs-5">
                 <i class="bi bi-linkedin"></i>
             </a>
-            <a href="https://github.com/RubberDuckyNouk" target="_blank" rel="noopener"
+            <a href="https://cv.noukgeelen.nl/pages/portfolio.html" target="_blank" rel="noopener"
                class="fs-5">
-                <i class="bi bi-github"></i>
+                <i class="bi bi-person-circle"></i>
             </a>
         </div>
     </footer>
