@@ -524,10 +524,114 @@ app.get("/api/climbs/top-average", async (req, res) => {
     }
 });
 
+// Create a member
+app.post("/api/members", async (req, res) => {
+    const { name, carpool, beer, bitterballen } = req.body;
+    if (!name || !name.trim()) {
+        return res.status(400).json({ error: "Name is required" });
+    }
+
+    try {
+        let driveOrder = null;
+        if (carpool) {
+            const maxOrder = await pool.query("SELECT COALESCE(MAX(drive_order), 0) + 1 AS next FROM members WHERE carpool = true");
+            driveOrder = maxOrder.rows[0].next;
+        }
+
+        const result = await pool.query(
+            `INSERT INTO members (name, carpool, beer, bitterballen, drive_order)
+             VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+            [name.trim(), !!carpool, !!beer, !!bitterballen, driveOrder]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to create member" });
+    }
+});
+
+// Update a member
+app.put("/api/members/:id", async (req, res) => {
+    const memberId = parseInt(req.params.id);
+    const { name, carpool, beer, bitterballen } = req.body;
+    if (!name || !name.trim()) {
+        return res.status(400).json({ error: "Name is required" });
+    }
+
+    try {
+        // If carpool is being enabled and member has no drive_order, assign one
+        let driveOrderUpdate = "";
+        let params = [name.trim(), !!carpool, !!beer, !!bitterballen, memberId];
+        if (carpool) {
+            const current = await pool.query("SELECT drive_order FROM members WHERE id = $1", [memberId]);
+            if (!current.rows[0]?.drive_order) {
+                const maxOrder = await pool.query("SELECT COALESCE(MAX(drive_order), 0) + 1 AS next FROM members WHERE carpool = true");
+                driveOrderUpdate = ", drive_order = $6";
+                params.push(maxOrder.rows[0].next);
+            }
+        }
+
+        const result = await pool.query(
+            `UPDATE members SET name = $1, carpool = $2, beer = $3, bitterballen = $4${driveOrderUpdate}
+             WHERE id = $5 RETURNING *`,
+            params
+        );
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: "Member not found" });
+        }
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to update member" });
+    }
+});
+
+// Delete a member
+app.delete("/api/members/:id", async (req, res) => {
+    const memberId = parseInt(req.params.id);
+
+    try {
+        // Check for references in sessions or climbs
+        const sessionRef = await pool.query(
+            "SELECT COUNT(*) FROM session_attendance WHERE member_id = $1",
+            [memberId]
+        );
+        const driverRef = await pool.query(
+            "SELECT COUNT(*) FROM sessions WHERE driver_id = $1 OR payer_id = $1",
+            [memberId]
+        );
+        const climbRef = await pool.query(
+            "SELECT COUNT(*) FROM climbs WHERE member_id = $1",
+            [memberId]
+        );
+
+        const total = parseInt(sessionRef.rows[0].count) +
+                       parseInt(driverRef.rows[0].count) +
+                       parseInt(climbRef.rows[0].count);
+
+        if (total > 0) {
+            return res.status(400).json({ error: "Cannot delete member with existing session or climb history" });
+        }
+
+        const result = await pool.query("DELETE FROM members WHERE id = $1", [memberId]);
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: "Member not found" });
+        }
+        res.json({ message: "Member deleted" });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to delete member" });
+    }
+});
+
 app.get("/bitterballen", (req, res) => {
     res.sendFile(path.join(__dirname, "views", "bitterballen.html"));
 });
 
 app.get("/stats", (req, res) => {
     res.sendFile(path.join(__dirname, "views", "stats.html"));
+});
+
+app.get("/settings", (req, res) => {
+    res.sendFile(path.join(__dirname, "views", "settings.html"));
 });
