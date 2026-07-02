@@ -55,26 +55,23 @@ async function loadKarma() {
             suggestedPayer.textContent = "No members set";
         }
 
-        // Build lookup for bitterballen balances
+        // Build lookup for bitterballen portions
         const bitterMap = {};
         for (const m of bitterMembers) {
-            bitterMap[m.id] = m.bitterballen_balance;
+            bitterMap[m.id] = m.portions;
         }
 
         const list = document.getElementById("karmaList");
         list.innerHTML = beerMembers.map(m => {
-            const bb = bitterMap[m.id];
-            const hasBitter = bb !== undefined;
-            function badge(val) {
-                const cls = val < 0 ? "bg-danger" : val > 0 ? "bg-success" : "bg-secondary";
-                return `<span class="badge ${cls}">${val > 0 ? "+" : ""}${val}</span>`;
-            }
+            const portions = bitterMap[m.id];
+            const hasBitter = portions !== undefined;
+            const beerCls = m.beer_balance < 0 ? "bg-danger" : m.beer_balance > 0 ? "bg-success" : "bg-secondary";
             return `
                 <li class="list-group-item d-flex justify-content-between align-items-center">
                     ${m.name}
                     <span>
-                        <i class="bi bi-cup-straw me-1"></i>${badge(m.beer_balance)}${hasBitter ? `
-                        <i class="bi bi-circle-fill ms-2 me-1"></i>${badge(bb)}` : ""}
+                        <i class="bi bi-cup-straw me-1"></i><span class="badge ${beerCls}">${m.beer_balance > 0 ? "+" : ""}${m.beer_balance}</span>${hasBitter ? `
+                        <i class="bi bi-circle-fill ms-2 me-1"></i><span class="badge bg-secondary">${portions}</span>` : ""}
                     </span>
                 </li>
             `;

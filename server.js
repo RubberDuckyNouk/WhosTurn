@@ -100,11 +100,17 @@ app.get("/api/payment", async (req, res) => {
     }
 });
 
-// Get beer members sorted by bitterballen balance (lowest = should pay next)
+// Get beer members with bitterballen portions ordered this year (lowest first)
 app.get("/api/bitterballen-karma", async (req, res) => {
     try {
         const result = await pool.query(
-            "SELECT * FROM members WHERE beer = true ORDER BY bitterballen_balance ASC, name"
+            `SELECT m.id, m.name, COUNT(s.id)::int AS portions
+             FROM members m
+             LEFT JOIN sessions s ON s.bitterballen_payer_id = m.id
+               AND EXTRACT(YEAR FROM s.session_date) = EXTRACT(YEAR FROM CURRENT_DATE)
+             WHERE m.beer = true
+             GROUP BY m.id, m.name
+             ORDER BY portions ASC, m.name`
         );
         res.json(result.rows);
     } catch (err) {
@@ -414,6 +420,17 @@ app.get("/api/climbs/current", async (req, res) => {
         const membersResult = await pool.query("SELECT id, name FROM members WHERE bitterballen = true ORDER BY name");
         const members = membersResult.rows;
 
+        // Check which members were present at a beer session since last Thursday
+        const beerAttendance = await pool.query(
+            `SELECT DISTINCT sa.member_id
+             FROM session_attendance sa
+             JOIN sessions s ON sa.session_id = s.id
+             WHERE s.payer_id IS NOT NULL
+               AND s.session_date >= $1`,
+            [lastThursday]
+        );
+        const presentAtBeer = new Set(beerAttendance.rows.map(r => r.member_id));
+
         // Get PRs for each member (all-time highest grade BEFORE this session)
         // and current session climbs
         const data = [];
@@ -447,23 +464,8 @@ app.get("/api/climbs/current", async (req, res) => {
             const isNewPr = sessionHighValue > prBeforeValue && sessionClimbs.rows.length > 0;
             const climbedAtPr = sessionHighValue >= prBeforeValue && prBeforeValue >= 0 && sessionClimbs.rows.length > 0;
 
-            // Calculate points for this member (fractional, 1/N = full share)
-            // New PR / at PR = full share, one below = 1/2, two below = 1/5, lower = 1/10
-            const share = 1 / members.length;
-            let memberPoints = 0;
-            for (const climb of sessionClimbs.rows) {
-                if (climb.grade_value > prBeforeValue) {
-                    memberPoints += share * 1.5; // new PR
-                } else if (climb.grade_value === prBeforeValue) {
-                    memberPoints += share; // at PR
-                } else if (climb.grade_value === prBeforeValue - 1) {
-                    memberPoints += share / 2; // one below
-                } else if (climb.grade_value === prBeforeValue - 2) {
-                    memberPoints += share / 5; // two below
-                } else if (prBeforeValue >= 0) {
-                    memberPoints += share / 10; // anything lower
-                }
-            }
+            // A member is "present" if they have climbs or were in a beer session
+            const isPresent = sessionClimbs.rows.length > 0 || presentAtBeer.has(member.id);
 
             data.push({
                 id: member.id,
@@ -473,15 +475,38 @@ app.get("/api/climbs/current", async (req, res) => {
                 session_high: sessionClimbs.rows[0]?.grade || null,
                 is_new_pr: isNewPr,
                 climbed_at_pr: climbedAtPr,
-                points: memberPoints
+                is_present: isPresent,
+                pr_before_value: prBeforeValue,
+                climbs: sessionClimbs.rows
             });
         }
 
-        // Bitterballen index = total points across all members (no cap)
-        // Target is 1.0 (each member's full share = 1/N, all members = 1.0)
+        // Only count present members for the share denominator
+        const presentCount = data.filter(d => d.is_present).length;
+        const share = presentCount > 0 ? 1 / presentCount : 0;
+
+        // Calculate points per member
         let totalPoints = 0;
         for (const m of data) {
-            totalPoints += m.points;
+            let memberPoints = 0;
+            for (const climb of m.climbs) {
+                if (climb.grade_value > m.pr_before_value) {
+                    memberPoints += share * 1.5; // new PR
+                } else if (climb.grade_value === m.pr_before_value) {
+                    memberPoints += share; // at PR
+                } else if (climb.grade_value === m.pr_before_value - 1) {
+                    memberPoints += share / 2; // one below
+                } else if (climb.grade_value === m.pr_before_value - 2) {
+                    memberPoints += share / 5; // two below
+                } else if (m.pr_before_value >= 0) {
+                    memberPoints += share / 10; // anything lower
+                }
+            }
+            m.points = memberPoints;
+            totalPoints += memberPoints;
+            // Clean up intermediate fields from response
+            delete m.pr_before_value;
+            delete m.climbs;
         }
 
         res.json({ members: data, bitterballen_index: totalPoints, target: 1.0 });

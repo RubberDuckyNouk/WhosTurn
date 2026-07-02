@@ -232,7 +232,7 @@ async function deleteClimb(climbId) {
     }
 }
 
-// Populate bitterballen order form (pre-select lowest balance)
+// Populate bitterballen order form (pre-select fewest portions this year)
 async function loadOrderForm() {
     try {
         const res = await fetch("/api/bitterballen-karma");
