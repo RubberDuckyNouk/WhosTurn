@@ -1,219 +1,173 @@
 
-// Load members
-async function loadMembers() {
-    try {
-        const response = await fetch("/api/members");
-        const members = await response.json();
-        const memberList = document.getElementById("memberList");
-
-        memberList.innerHTML = members.map(member => `
-            <li class="list-group-item d-flex justify-content-between align-items-center">
-                ${member.name}
-                ${member.in_carpool
-                ? '<span class="badge bg-primary">Carpool</span>'
-                : ""}
-            </li>
-        `).join("");
-    } catch (err) {
-        console.error("Failed to load members:", err);
-    }
-}
-
 // Car icon colours per driver
 const carColors = { "Nouk": "red" };
 const defaultCarColor = "grey";
 
-// Load driving rotation and current driver
+// Load driving section (rotation with skip flag)
 async function loadDriving() {
     try {
         const response = await fetch("/api/driving");
         const drivers = await response.json();
 
-        // Show current driver
+        // Suggested = skipped member first, otherwise current rotation driver
+        const skipped = drivers.find(d => d.drive_skipped);
         const current = drivers.find(d => d.is_current_driver);
-        const currentDriver = document.getElementById("currentDriver");
-        if (current) {
-            const color = carColors[current.name] || defaultCarColor;
-            currentDriver.innerHTML = `<i class="bi bi-car-front-fill me-2" style="color: ${color}"></i>${current.name}`;
-        } else {
-            currentDriver.textContent = "No driver set";
-        }
+        const suggested = skipped || current;
 
-        // Show rotation order
-        const drivingOrder = document.getElementById("drivingOrder");
-        drivingOrder.innerHTML = drivers.map(driver => {
-            const color = carColors[driver.name] || defaultCarColor;
-            return `
-            <li class="list-group-item ${driver.is_current_driver ? "active" : ""}">
-                <i class="bi bi-car-front-fill me-2" style="color: ${color}"></i>${driver.name}
-            </li>
-        `;
-        }).join("");
+        const suggestedEl = document.getElementById("suggestedDriver");
+        if (suggested) {
+            const color = carColors[suggested.name] || defaultCarColor;
+            suggestedEl.innerHTML = `<i class="bi bi-car-front-fill me-2" style="color: ${color}"></i>${suggested.name}`;
+        } else {
+            suggestedEl.textContent = "No drivers set";
+        }
     } catch (err) {
         console.error("Failed to load driving data:", err);
     }
 }
 
-// Group display names
-const groupNames = { 1: "DomoYomo", 2: "P.S." };
-
-// Load payment balances per group
+// Load beer payment section (balance-based, flat list)
 async function loadPayment() {
     try {
         const response = await fetch("/api/payment");
-        const groups = await response.json();
-        const container = document.getElementById("paymentGroups");
+        const members = await response.json();
 
-        container.innerHTML = Object.keys(groups).map(groupNum => {
-            const members = groups[groupNum];
-            const suggestedPayer = members[0]; // Lowest balance is first (sorted by server)
-            const groupName = groupNames[groupNum] || `Group ${groupNum}`;
+        const suggestedPayer = document.getElementById("suggestedPayer");
+        if (members.length > 0) {
+            suggestedPayer.textContent = members[0].name;
+        } else {
+            suggestedPayer.textContent = "No members set";
+        }
 
-            return `
-                <div class="row mt-4">
-                    <!-- Group ${groupNum} Next Payer -->
-                    <div class="col-md-6">
-                        <div class="card h-100">
-                            <div class="card-body text-center">
-                                <h5 class="card-title">Next to Pay - ${groupName}</h5>
-                                <p class="display-6">${suggestedPayer ? suggestedPayer.name : "No members"}</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Group ${groupNum} Balances -->
-                    <div class="col-md-6">
-                        <div class="card h-100">
-                            <div class="card-body">
-                                <h5 class="card-title">Beer Karma - ${groupName}</h5>
-                                <ul class="list-group list-group-flush">
-                                    ${members.map(m => `
-                                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                                            ${m.name}
-                                            <span class="badge ${m.pay_balance < 0 ? "bg-danger" : m.pay_balance > 0 ? "bg-success" : "bg-secondary"}">
-                                                ${m.pay_balance > 0 ? "+" : ""}${m.pay_balance}
-                                            </span>
-                                        </li>
-                                    `).join("")}
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Group ${groupNum} Record Button -->
-                <div class="text-center mt-3">
-                    <button class="btn btn-success record-btn" data-group="${groupNum}"
-                            data-bs-toggle="modal" data-bs-target="#recordModal-${groupNum}">
-                        Record Payment - ${groupName}
-                    </button>
-                    <div class="session-message-${groupNum} mt-2"></div>
-                </div>
-
-                <!-- Group ${groupNum} Record Modal -->
-                <div class="modal fade" id="recordModal-${groupNum}" tabindex="-1"
-                     aria-labelledby="recordModalLabel-${groupNum}" aria-hidden="true">
-                    <div class="modal-dialog">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title" id="recordModalLabel-${groupNum}">
-                                    Record Payment - ${groupName}
-                                </h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                            </div>
-                            <div class="modal-body">
-                                <div class="mb-3">
-                                    <label class="form-label" for="sessionDate-${groupNum}">Date</label>
-                                    <input type="date" class="form-control session-date"
-                                           id="sessionDate-${groupNum}" data-group="${groupNum}"
-                                           value="${new Date().toISOString().split("T")[0]}">
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label" for="payer-${groupNum}">Who's paying?</label>
-                                    <select class="form-select payer-select" id="payer-${groupNum}" data-group="${groupNum}">
-                                        ${members.map(m => `
-                                            <option value="${m.id}" ${m.id === suggestedPayer.id ? "selected" : ""}>
-                                                ${m.name}
-                                            </option>
-                                        `).join("")}
-                                    </select>
-                                </div>
-                                <p class="text-muted">Uncheck absent members:</p>
-                                ${members.map(m => `
-                                    <div class="form-check">
-                                        <input class="form-check-input attendance-${groupNum}"
-                                               type="checkbox" value="${m.id}"
-                                               id="attend-${m.id}" checked>
-                                        <label class="form-check-label" for="attend-${m.id}">
-                                            ${m.name}
-                                        </label>
-                                    </div>
-                                `).join("")}
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                <button type="button" class="btn btn-success confirm-record-btn" data-group="${groupNum}">
-                                    Confirm
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }).join("");
-
-        // Keep payer dropdown in sync with attendance checkboxes
-        document.querySelectorAll(".form-check-input[class*='attendance-']").forEach(cb => {
-            cb.addEventListener("change", () => {
-                const groupNum = cb.className.match(/attendance-(\d+)/)[1];
-                const payerSelect = document.getElementById(`payer-${groupNum}`);
-                const checkedIds = Array.from(document.querySelectorAll(`.attendance-${groupNum}:checked`))
-                    .map(c => c.value);
-
-                // Disable options for absent members
-                Array.from(payerSelect.options).forEach(opt => {
-                    opt.disabled = !checkedIds.includes(opt.value);
-                });
-
-                // If current payer is unchecked, switch to first present member
-                if (!checkedIds.includes(payerSelect.value)) {
-                    payerSelect.value = checkedIds[0] || "";
-                }
-            });
-        });
-
-        // Add event listeners to confirm buttons inside modals
-        document.querySelectorAll(".confirm-record-btn").forEach(btn => {
-            btn.addEventListener("click", () => {
-                const groupNum = btn.dataset.group;
-                recordSession(parseInt(groupNum));
-            });
-        });
+        const balances = document.getElementById("beerBalances");
+        balances.innerHTML = members.map(m => `
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                ${m.name}
+                <span class="badge ${m.beer_balance < 0 ? "bg-danger" : m.beer_balance > 0 ? "bg-success" : "bg-secondary"}">
+                    ${m.beer_balance > 0 ? "+" : ""}${m.beer_balance}
+                </span>
+            </li>
+        `).join("");
     } catch (err) {
         console.error("Failed to load payment data:", err);
     }
 }
 
-// Record a session for a group
-async function recordSession(payGroup) {
-    // Get checked (present) member IDs
-    const checkboxes = document.querySelectorAll(`.attendance-${payGroup}:checked`);
-    const presentIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
-    const sessionDate = document.getElementById(`sessionDate-${payGroup}`).value;
+// Populate drive modal
+async function loadDriveForm() {
+    try {
+        const response = await fetch("/api/driving");
+        const drivers = await response.json();
 
-    if (presentIds.length < 2) {
-        const msgDiv = document.querySelector(`.session-message-${payGroup}`);
-        msgDiv.innerHTML = `<span class="text-danger">At least 2 people must be present</span>`;
+        document.getElementById("driveDate").value = new Date().toISOString().split("T")[0];
+
+        // Pre-select the suggested driver
+        const skipped = drivers.find(d => d.drive_skipped);
+        const current = drivers.find(d => d.is_current_driver);
+        const suggestedId = (skipped || current)?.id;
+
+        const driverSelect = document.getElementById("driverSelect");
+        driverSelect.innerHTML = drivers.map(d =>
+            `<option value="${d.id}" ${d.id === suggestedId ? "selected" : ""}>${d.name}</option>`
+        ).join("");
+    } catch (err) {
+        console.error("Failed to load drive form:", err);
+    }
+}
+
+// Populate beer modal
+async function loadBeerForm() {
+    try {
+        const response = await fetch("/api/payment");
+        const members = await response.json();
+
+        document.getElementById("beerDate").value = new Date().toISOString().split("T")[0];
+
+        document.getElementById("payerSelect").innerHTML = members.map(m =>
+            `<option value="${m.id}">${m.name}</option>`
+        ).join("");
+
+        document.getElementById("beerCounts").innerHTML = members.map(m => `
+            <div class="input-group mb-2">
+                <span class="input-group-text" style="min-width: 120px;">${m.name}</span>
+                <button type="button" class="btn btn-outline-danger beer-minus" data-member="${m.id}">-</button>
+                <span class="form-control text-center beer-count-display" data-member="${m.id}">0</span>
+                <button type="button" class="btn btn-outline-success beer-plus" data-member="${m.id}">+</button>
+            </div>
+        `).join("");
+
+        document.querySelectorAll(".beer-plus").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const display = document.querySelector(`.beer-count-display[data-member="${btn.dataset.member}"]`);
+                display.textContent = parseInt(display.textContent) + 1;
+            });
+        });
+        document.querySelectorAll(".beer-minus").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const display = document.querySelector(`.beer-count-display[data-member="${btn.dataset.member}"]`);
+                const val = parseInt(display.textContent);
+                if (val > 0) display.textContent = val - 1;
+            });
+        });
+    } catch (err) {
+        console.error("Failed to load beer form:", err);
+    }
+}
+
+// Record drive
+async function recordDrive() {
+    const sessionDate = document.getElementById("driveDate").value;
+    const driverId = parseInt(document.getElementById("driverSelect").value);
+
+    try {
+        const result = await fetch("/api/sessions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                session_date: sessionDate,
+                driver_id: driverId,
+                present_ids: [driverId]
+            })
+        });
+
+        if (result.ok) {
+            const modal = bootstrap.Modal.getInstance(document.getElementById("driveModal"));
+            if (modal) modal.hide();
+            showMessage("Drive recorded!", "success", "sessionMessage");
+            loadDriving();
+            loadHistory();
+        } else {
+            const data = await result.json();
+            showMessage(data.error, "danger", "driveMessage");
+        }
+    } catch (err) {
+        console.error("Failed to record drive:", err);
+    }
+}
+
+// Record beer payment
+async function recordBeer() {
+    const sessionDate = document.getElementById("beerDate").value;
+    const payerId = parseInt(document.getElementById("payerSelect").value);
+
+    const beerCounts = {};
+    document.querySelectorAll(".beer-count-display").forEach(el => {
+        const count = parseInt(el.textContent) || 0;
+        if (count > 0) {
+            beerCounts[el.dataset.member] = count;
+        }
+    });
+
+    const totalBeers = Object.values(beerCounts).reduce((sum, c) => sum + c, 0);
+    if (totalBeers < 1) {
+        showMessage("At least one beer must be recorded", "danger", "beerMessage");
         return;
     }
 
-    const payerId = parseInt(document.getElementById(`payer-${payGroup}`).value);
-    const payerName = document.getElementById(`payer-${payGroup}`).selectedOptions[0].textContent.trim();
-
+    // present_ids = everyone with a beer count + the payer
+    const presentIds = Object.keys(beerCounts).map(id => parseInt(id));
     if (!presentIds.includes(payerId)) {
-        const msgDiv = document.querySelector(`.session-message-${payGroup}`);
-        msgDiv.innerHTML = `<span class="text-danger">Payer must be present</span>`;
-        return;
+        presentIds.push(payerId);
     }
 
     try {
@@ -221,30 +175,31 @@ async function recordSession(payGroup) {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                pay_group: payGroup,
+                session_date: sessionDate,
                 payer_id: payerId,
-                present_ids: presentIds,
-                session_date: sessionDate
-            }),
+                beer_counts: beerCounts,
+                present_ids: presentIds
+            })
         });
 
-        const data = await result.json();
-        const msgDiv = document.querySelector(`.session-message-${payGroup}`);
-
         if (result.ok) {
-            // Close the modal
-            const modal = bootstrap.Modal.getInstance(document.getElementById(`recordModal-${payGroup}`));
+            const modal = bootstrap.Modal.getInstance(document.getElementById("beerModal"));
             if (modal) modal.hide();
-            msgDiv.innerHTML = `<span class="text-success">${payerName} paid! ${data.message}</span>`;
-            loadDriving();
+            showMessage("Beer payment recorded!", "success", "sessionMessage");
             loadPayment();
             loadHistory();
         } else {
-            msgDiv.innerHTML = `<span class="text-danger">${data.error}</span>`;
+            const data = await result.json();
+            showMessage(data.error, "danger", "beerMessage");
         }
     } catch (err) {
-        console.error("Failed to record session:", err);
+        console.error("Failed to record beer:", err);
     }
+}
+
+function showMessage(text, type, target) {
+    const msgDiv = document.getElementById(target || "sessionMessage");
+    msgDiv.innerHTML = `<span class="text-${type}">${text}</span>`;
 }
 
 // Current history filter
@@ -265,18 +220,20 @@ async function loadHistory() {
         container.innerHTML = `
             <ul class="list-group list-group-flush">
                 ${sessions.map(s => {
-                    const groupName = groupNames[s.pay_group] || `Group ${s.pay_group}`;
                     const date = new Date(s.session_date).toLocaleDateString();
+                    const details = [];
+                    if (s.driver_name) details.push(`Drove: ${s.driver_name}`);
+                    if (s.payer_name) details.push(`Paid: ${s.payer_name}`);
+                    if (s.beer_details && s.beer_details.length > 0) {
+                        details.push(`Beers: ${s.beer_details.join(", ")}`);
+                    }
+
                     return `
                         <li class="list-group-item">
                             <div class="d-flex justify-content-between align-items-start">
                                 <div>
-                                    <strong>${date}</strong> — ${groupName}<br>
-                                    <small class="text-muted">
-                                        Paid: ${s.payer_name}
-                                        ${s.driver_name ? ` | Drove: ${s.driver_name}` : ""}
-                                        | Present: ${s.present.join(", ")}
-                                    </small>
+                                    <strong>${date}</strong><br>
+                                    <small class="text-muted">${details.join(" | ")}</small>
                                 </div>
                                 <button class="btn btn-sm btn-outline-danger delete-session-btn"
                                         data-id="${s.id}">
@@ -289,11 +246,9 @@ async function loadHistory() {
             </ul>
         `;
 
-        // Add event listeners to delete buttons
         document.querySelectorAll(".delete-session-btn").forEach(btn => {
             btn.addEventListener("click", () => {
-                const sessionId = parseInt(btn.dataset.id);
-                deleteSession(sessionId);
+                deleteSession(parseInt(btn.dataset.id));
             });
         });
     } catch (err) {
@@ -338,6 +293,7 @@ async function deleteSession(sessionId) {
 
         if (result.ok) {
             loadHistory();
+            loadDriving();
             loadPayment();
         }
     } catch (err) {
@@ -345,8 +301,22 @@ async function deleteSession(sessionId) {
     }
 }
 
-// Load data when the page is ready
-loadMembers();
+// Button handlers
+document.getElementById("confirmDrive").addEventListener("click", recordDrive);
+document.getElementById("confirmBeer").addEventListener("click", recordBeer);
+
+// Reset forms when modals open
+document.getElementById("driveModal").addEventListener("show.bs.modal", () => {
+    loadDriveForm();
+    document.getElementById("driveMessage").innerHTML = "";
+});
+
+document.getElementById("beerModal").addEventListener("show.bs.modal", () => {
+    loadBeerForm();
+    document.getElementById("beerMessage").innerHTML = "";
+});
+
+// Load data on page ready
 loadDriving();
 loadPayment();
 loadHistory();

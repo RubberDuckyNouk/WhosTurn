@@ -10,6 +10,15 @@ const pool = new Pool({
 
 async function initDatabase() {
     await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        display_name VARCHAR(100) NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+`);
+    await pool.query(`
         CREATE TABLE IF NOT EXISTS members (
             id SERIAL PRIMARY KEY,
             name VARCHAR(100) NOT NULL,
@@ -48,6 +57,41 @@ async function initDatabase() {
             climb_date DATE NOT NULL DEFAULT CURRENT_DATE
         )
     `);
+
+    // --- Migration: replace pay_group with boolean flags, keep driving rotation ---
+
+    // Add new columns (safe on fresh DBs — IF NOT EXISTS)
+    await pool.query(`ALTER TABLE members ADD COLUMN IF NOT EXISTS carpool BOOLEAN NOT NULL DEFAULT false`);
+    await pool.query(`ALTER TABLE members ADD COLUMN IF NOT EXISTS beer BOOLEAN NOT NULL DEFAULT false`);
+    await pool.query(`ALTER TABLE members ADD COLUMN IF NOT EXISTS bitterballen BOOLEAN NOT NULL DEFAULT false`);
+    await pool.query(`ALTER TABLE members ADD COLUMN IF NOT EXISTS beer_balance INTEGER NOT NULL DEFAULT 0`);
+    await pool.query(`ALTER TABLE members ADD COLUMN IF NOT EXISTS drive_skipped BOOLEAN NOT NULL DEFAULT false`);
+    await pool.query(`ALTER TABLE members ADD COLUMN IF NOT EXISTS drive_order INTEGER`);
+    await pool.query(`ALTER TABLE members ADD COLUMN IF NOT EXISTS is_current_driver BOOLEAN NOT NULL DEFAULT false`);
+    await pool.query(`ALTER TABLE session_attendance ADD COLUMN IF NOT EXISTS beer_count INTEGER NOT NULL DEFAULT 0`);
+    await pool.query(`ALTER TABLE members DROP COLUMN IF EXISTS drive_balance`);
+
+    // Make payer_id nullable (sessions can be driving-only)
+    await pool.query(`ALTER TABLE sessions ALTER COLUMN payer_id DROP NOT NULL`);
+
+    // Migrate data from old columns if they still exist
+    const colCheck = await pool.query(`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'members' AND column_name = 'pay_group'
+    `);
+
+    if (colCheck.rows.length > 0) {
+        await pool.query(`UPDATE members SET carpool = in_carpool WHERE carpool = false AND in_carpool = true`);
+        await pool.query(`UPDATE members SET beer = true WHERE pay_group IS NOT NULL`);
+        await pool.query(`UPDATE members SET bitterballen = true`);
+        await pool.query(`UPDATE members SET beer_balance = pay_balance WHERE beer_balance = 0 AND pay_balance != 0`);
+
+        // Drop old columns (keep drive_order and is_current_driver for rotation)
+        await pool.query(`ALTER TABLE members DROP COLUMN IF EXISTS in_carpool`);
+        await pool.query(`ALTER TABLE members DROP COLUMN IF EXISTS pay_group`);
+        await pool.query(`ALTER TABLE members DROP COLUMN IF EXISTS pay_balance`);
+        await pool.query(`ALTER TABLE sessions DROP COLUMN IF EXISTS pay_group`);
+    }
 
     console.log("Database initialized — tables ready");
 }
