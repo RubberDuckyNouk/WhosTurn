@@ -9,6 +9,7 @@ services:
     env:
       NODE_ENV: production
       DATABASE_URL: ${service.db.url}
+      DB_SSL: "false"
     depends_on:
       - service: db
         condition: healthy
