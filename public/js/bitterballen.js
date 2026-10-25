@@ -232,13 +232,14 @@ async function deleteClimb(climbId) {
     }
 }
 
-// Populate bitterballen order form (pre-select fewest portions this year)
+// Populate bitterballen order form
 async function loadOrderForm() {
     try {
-        const res = await fetch("/api/bitterballen-karma");
+        const res = await fetch("/api/members");
         const members = await res.json();
+        const beerMembers = members.filter(m => m.beer);
 
-        document.getElementById("bitterballenPayer").innerHTML = members.map((m, i) =>
+        document.getElementById("bitterballenPayer").innerHTML = beerMembers.map((m, i) =>
             `<option value="${m.id}" ${i === 0 ? "selected" : ""}>${m.name}</option>`
         ).join("");
     } catch (err) {

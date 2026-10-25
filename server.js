@@ -252,27 +252,6 @@ app.get("/api/payment", async (req, res) => {
     }
 });
 
-// Get beer members with bitterballen portions ordered this year (lowest first)
-app.get("/api/bitterballen-karma", async (req, res) => {
-    const groupId = req.session.groupId;
-    try {
-        const result = await pool.query(
-            `SELECT m.id, m.name, COUNT(s.id)::int AS portions
-             FROM members m
-             LEFT JOIN sessions s ON s.bitterballen_payer_id = m.id
-               AND EXTRACT(YEAR FROM s.session_date) = EXTRACT(YEAR FROM CURRENT_DATE)
-             WHERE m.beer = true AND m.group_id = $1
-             GROUP BY m.id, m.name
-             ORDER BY portions ASC, m.name`,
-            [groupId]
-        );
-        res.json(result.rows);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to fetch bitterballen karma data" });
-    }
-});
-
 // Record a session
 app.post("/api/sessions", async (req, res) => {
     const groupId = req.session.groupId;
