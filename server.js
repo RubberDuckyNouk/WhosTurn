@@ -37,6 +37,11 @@ const GRADES = [
     "8a", "8a+", "8b", "8b+"
 ];
 
+// Trust first proxy (needed for secure cookies behind reverse proxy)
+if (process.env.NODE_ENV === "production") {
+    app.set("trust proxy", 1);
+}
+
 // Enable JSON parsing
 app.use(express.json());
 
