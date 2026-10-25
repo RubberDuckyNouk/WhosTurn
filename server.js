@@ -904,3 +904,7 @@ app.get("/stats", (req, res) => {
 app.get("/settings", (req, res) => {
     res.sendFile(path.join(__dirname, "views", "settings.html"));
 });
+
+app.get("/info", (req, res) => {
+    res.sendFile(path.join(__dirname, "views", "info.html"));
+});
