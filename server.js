@@ -40,9 +40,132 @@ const GRADES = [
 // Enable JSON parsing
 app.use(express.json());
 
+// Session middleware (stored in PostgreSQL, 30-day cookie)
+app.use(session({
+    store: new pgSession({
+        pool: pool,
+        tableName: "user_sessions",
+        createTableIfMissing: true
+    }),
+    secret: process.env.SESSION_SECRET || "dev-secret-change-me",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production"
+    }
+}));
+
 // Serve static files from the public folder
 app.use(express.static(path.join(__dirname, "public")));
 
+// --- Auth API ---
+
+const SALT_ROUNDS = 10;
+
+// Create a new group
+app.post("/api/auth/signup", async (req, res) => {
+    const { name, email, password } = req.body;
+
+    if (!name || !email || !password) {
+        return res.status(400).json({ error: "All fields are required" });
+    }
+    if (password.length < 6) {
+        return res.status(400).json({ error: "Password must be at least 6 characters" });
+    }
+
+    try {
+        const existing = await pool.query("SELECT id FROM groups WHERE name = $1", [name]);
+        if (existing.rows.length > 0) {
+            return res.status(409).json({ error: "Group name already taken" });
+        }
+
+        const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+        const result = await pool.query(
+            "INSERT INTO groups (name, email, password_hash) VALUES ($1, $2, $3) RETURNING id, name, email",
+            [name.trim(), email.trim(), passwordHash]
+        );
+
+        const group = result.rows[0];
+        req.session.groupId = group.id;
+
+        res.status(201).json({ id: group.id, name: group.name, email: group.email });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to create group" });
+    }
+});
+
+// Log in to a group
+app.post("/api/auth/login", async (req, res) => {
+    const { name, password } = req.body;
+
+    if (!name || !password) {
+        return res.status(400).json({ error: "Group name and password are required" });
+    }
+
+    try {
+        const result = await pool.query("SELECT * FROM groups WHERE name = $1", [name]);
+        if (result.rows.length === 0) {
+            return res.status(401).json({ error: "Invalid group name or password" });
+        }
+
+        const group = result.rows[0];
+        const match = await bcrypt.compare(password, group.password_hash);
+        if (!match) {
+            return res.status(401).json({ error: "Invalid group name or password" });
+        }
+
+        req.session.groupId = group.id;
+
+        res.json({ id: group.id, name: group.name, email: group.email });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Login failed" });
+    }
+});
+
+// Log out
+app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy((err) => {
+        if (err) {
+            return res.status(500).json({ error: "Logout failed" });
+        }
+        res.clearCookie("connect.sid");
+        res.json({ message: "Logged out" });
+    });
+});
+
+// Get current group
+app.get("/api/auth/me", async (req, res) => {
+    if (!req.session.groupId) {
+        return res.status(401).json({ error: "Not logged in" });
+    }
+
+    try {
+        const result = await pool.query(
+            "SELECT id, name, email FROM groups WHERE id = $1",
+            [req.session.groupId]
+        );
+        if (result.rows.length === 0) {
+            return res.status(401).json({ error: "Group not found" });
+        }
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to fetch group" });
+    }
+});
+
+// Middleware for routes that require login (not applied yet — ticket 25)
+function requireLogin(req, res, next) {
+    if (!req.session.groupId) {
+        return res.status(401).json({ error: "Login required" });
+    }
+    next();
+}
 
 // get html file
 app.get("/", (req, res) => {
