@@ -37,15 +37,11 @@ async function loadDriving() {
     }
 }
 
-// Load combined karma card (beer + bitterballen balances per member)
+// Load beer balances card
 async function loadKarma() {
     try {
-        const [beerRes, bitterRes] = await Promise.all([
-            fetch("/api/payment"),
-            fetch("/api/bitterballen-karma")
-        ]);
-        const beerMembers = await beerRes.json();
-        const bitterMembers = await bitterRes.json();
+        const res = await fetch("/api/payment");
+        const beerMembers = await res.json();
 
         // Suggested payer
         const suggestedPayer = document.getElementById("suggestedPayer");
@@ -55,23 +51,14 @@ async function loadKarma() {
             suggestedPayer.textContent = "No members set";
         }
 
-        // Build lookup for bitterballen portions
-        const bitterMap = {};
-        for (const m of bitterMembers) {
-            bitterMap[m.id] = m.portions;
-        }
-
         const list = document.getElementById("karmaList");
         list.innerHTML = beerMembers.map(m => {
-            const portions = bitterMap[m.id];
-            const hasBitter = portions !== undefined;
             const beerCls = m.beer_balance < 0 ? "bg-danger" : m.beer_balance > 0 ? "bg-success" : "bg-secondary";
             return `
                 <li class="list-group-item d-flex justify-content-between align-items-center">
                     ${m.name}
                     <span>
-                        <i class="bi bi-cup-straw me-1"></i><span class="badge ${beerCls}">${m.beer_balance > 0 ? "+" : ""}${m.beer_balance}</span>${hasBitter ? `
-                        <i class="bi bi-circle-fill ms-2 me-1"></i><span class="badge bg-secondary">${portions}</span>` : ""}
+                        <i class="bi bi-cup-straw me-1"></i><span class="badge ${beerCls}">${m.beer_balance > 0 ? "+" : ""}${m.beer_balance}</span>
                     </span>
                 </li>
             `;

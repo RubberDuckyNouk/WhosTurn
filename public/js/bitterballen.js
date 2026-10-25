@@ -41,20 +41,23 @@ function renderThermometer(points, target) {
     const text = document.getElementById("indexText");
 
     const percentage = Math.round((points / target) * 100);
-    const barWidth = Math.min(percentage, 100);
 
-    bar.style.width = barWidth + "%";
+    if (percentage >= 100) {
+        bar.style.width = "100%";
+    } else {
+        bar.style.width = percentage + "%";
+    }
     bar.textContent = percentage + "%";
     bar.setAttribute("aria-valuenow", percentage);
 
-    // Colour stops
+    // Colour: pink when over 100%, green at 100%, warning/danger below
     if (percentage > 100) {
         bar.className = "progress-bar";
         bar.style.backgroundColor = "#e91e8c";
-    } else if (percentage >= 67) {
+    } else if (percentage === 100) {
         bar.className = "progress-bar bg-success";
         bar.style.backgroundColor = "";
-    } else if (percentage >= 34) {
+    } else if (percentage >= 50) {
         bar.className = "progress-bar bg-warning";
         bar.style.backgroundColor = "";
     } else {
@@ -69,10 +72,12 @@ function renderThermometer(points, target) {
         text.textContent = "Some effort, but the bitterballen are still frozen...";
     } else if (percentage < 100) {
         text.textContent = "Getting warm! The bitterballen are almost ready!";
-    } else if (percentage === 100) {
+    } else if (percentage < 150) {
         text.textContent = "BITTERBALLEN! Everyone crushed it!";
+    } else if (percentage < 250) {
+        text.textContent = "Someone set a new PR! MEGA BITTERBALLEN!";
     } else {
-        text.textContent = "MEGA BITTERBALLEN! You animals went beyond!";
+        text.textContent = "Multiple new PRs! ULTRA BITTERBALLEN! You animals!";
     }
 }
 
@@ -166,8 +171,7 @@ function setupForm() {
                 renderThermometer(data.bitterballen_index, data.target);
                 renderMemberStats(data.members);
                 loadRecentClimbs();
-                // Reset grade selection but keep member and date
-                document.getElementById("climbGradeNum").value = "";
+                // Reset plus checkbox but keep member, date, grade number and letter
                 document.getElementById("climbPlus").checked = false;
             } else {
                 const err = await res.json();
@@ -232,13 +236,14 @@ async function deleteClimb(climbId) {
     }
 }
 
-// Populate bitterballen order form (pre-select fewest portions this year)
+// Populate bitterballen order form
 async function loadOrderForm() {
     try {
-        const res = await fetch("/api/bitterballen-karma");
+        const res = await fetch("/api/members");
         const members = await res.json();
+        const beerMembers = members.filter(m => m.beer);
 
-        document.getElementById("bitterballenPayer").innerHTML = members.map((m, i) =>
+        document.getElementById("bitterballenPayer").innerHTML = beerMembers.map((m, i) =>
             `<option value="${m.id}" ${i === 0 ? "selected" : ""}>${m.name}</option>`
         ).join("");
     } catch (err) {
