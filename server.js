@@ -167,6 +167,15 @@ function requireLogin(req, res, next) {
     next();
 }
 
+// Auth pages
+app.get("/login", (req, res) => {
+    res.sendFile(path.join(__dirname, "views", "login.html"));
+});
+
+app.get("/signup", (req, res) => {
+    res.sendFile(path.join(__dirname, "views", "signup.html"));
+});
+
 // get html file
 app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, "views", "index.html"));

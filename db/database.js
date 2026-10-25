@@ -9,6 +9,9 @@ const pool = new Pool({
 });
 
 async function initDatabase() {
+    // Migration: drop unused users table from old ticket 16
+    await pool.query(`DROP TABLE IF EXISTS users`);
+
     await pool.query(`
     CREATE TABLE IF NOT EXISTS groups (
         id SERIAL PRIMARY KEY,
