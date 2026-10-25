@@ -1,0 +1,166 @@
+<!doctype html>
+<html>
+
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bami tracker by Nouk</title>
+
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
+          rel="stylesheet">
+
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+    <!-- Custom stylesheet -->
+    <link rel="stylesheet" href="css/style.css">
+
+</head>
+
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">WhosTurn</a>
+
+            <!-- Hamburger button (shows on small screens) -->
+            <button class="navbar-toggler" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#mainNav"
+                    aria-controls="mainNav" aria-expanded="false"
+                    aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <!-- Links (collapse into hamburger on small screens) -->
+            <div class="collapse navbar-collapse" id="mainNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/bitterballen">Climbing</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/stats">Stats</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/settings">Settings</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/info">Info</a>
+                    </li>
+                </ul>
+                <span id="userNav" class="navbar-text ms-3 d-none">
+                    <span id="navGroupName"></span>
+                    <button id="logoutBtn" class="btn btn-sm btn-outline-light ms-2">Logout</button>
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container my-4">
+        <h1>How It Works</h1>
+
+        <!-- How Driving Works -->
+        <div class="card mt-4">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-car-front me-2"></i>How Driving Works</h5>
+                <p>
+                    Carpool members take turns driving to the climbing gym in a fixed rotation.
+                    After each session is recorded, the rotation advances to the next driver in the list.
+                    When the last person in the rotation has driven, it wraps back around to the first.
+                </p>
+                <p class="mb-0">
+                    The home page always shows who is next in the rotation so everyone knows
+                    who is driving before the session starts.
+                </p>
+            </div>
+        </div>
+
+        <!-- How Paying Works -->
+        <div class="card mt-4">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-wallet2 me-2"></i>How Paying Works</h5>
+                <p>
+                    Payments are tracked using a balance system to keep things fair over time.
+                    When someone pays for a round, their balance goes up by the number of other
+                    attendees. Each other attendee's balance goes down by one.
+                </p>
+                <p class="mb-0">
+                    The member with the <strong>lowest balance</strong> is suggested as the next payer.
+                    This way, no one ends up paying significantly more than anyone else in the long run.
+                    Payment groups are tracked independently so each group stays fair on its own.
+                </p>
+            </div>
+        </div>
+
+        <!-- How Bitterballen Works -->
+        <div class="card mt-4">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-circle-fill me-2"></i>How Bitterballen Works</h5>
+                <p>
+                    The bitterballen index is based on climbing performance during each session.
+                    As members climb harder grades and hit personal records, the index rises.
+                    You can track the current index on the Climbing page.
+                </p>
+                <p class="mb-0">
+                    When the index reaches the target threshold, it triggers a bitterballen order
+                    for the group. After the order is placed, the index resets and the cycle starts again.
+                </p>
+            </div>
+        </div>
+
+        <!-- Recording a Session -->
+        <div class="card mt-4">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-journal-check me-2"></i>Recording a Session</h5>
+                <p>Here is how to record a session step by step:</p>
+                <ol>
+                    <li>Go to the Home page and check the attendance list to mark who is present.</li>
+                    <li>The app suggests who should pay (lowest balance) and who should drive (next in rotation).</li>
+                    <li>Confirm or adjust the suggestions if needed.</li>
+                    <li>Hit record to save the session. Balances update automatically and the driving rotation advances.</li>
+                </ol>
+                <p class="mb-0">
+                    If a session was recorded by mistake, it can be deleted from the Stats page,
+                    which will reverse all balance changes.
+                </p>
+            </div>
+        </div>
+
+    </main>
+
+    <!--Footer-->
+    <footer>
+        <div class="container">
+            <p>
+                Beer poured by
+                <a href="https://yosemite.nl/" target="_blank" rel="noopener">
+                    <img src="/images/YosemiteLogo.png" alt="Yosemite" style="height: 2em; vertical-align: middle;">
+                </a>
+            </p>
+            <p>Check out my other work.</p>
+            <a href="https://www.linkedin.com/in/nouk-g-1718b9170/" target="_blank" rel="noopener"
+               class=" me-3 fs-5">
+                <i class="bi bi-linkedin"></i>
+            </a>
+            <a href="https://github.com/RubberDuckyNouk" target="_blank" rel="noopener"
+               class="fs-5">
+                <i class="bi bi-github"></i>
+            </a>
+        </div>
+    </footer>
+
+    <!-- Bootstrap 5 JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Navbar (auth) -->
+    <script src="/js/navbar.js"></script>
+
+    <!-- Live reload -->
+    <script src="http://localhost:35729/livereload.js"></script>
+
+</body>
+</html>

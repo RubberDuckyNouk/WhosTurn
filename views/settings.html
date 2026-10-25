@@ -48,7 +48,14 @@
                     <li class="nav-item">
                         <a class="nav-link active" href="/settings">Settings</a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/info">Info</a>
+                    </li>
                 </ul>
+                <span id="userNav" class="navbar-text ms-3 d-none">
+                    <span id="navGroupName"></span>
+                    <button id="logoutBtn" class="btn btn-sm btn-outline-light ms-2">Logout</button>
+                </span>
             </div>
         </div>
     </nav>
@@ -116,6 +123,9 @@
 
     <!-- Settings JavaScript -->
     <script src="/js/settings.js"></script>
+
+    <!-- Navbar (auth) -->
+    <script src="/js/navbar.js"></script>
 
     <!-- Live reload -->
     <script src="http://localhost:35729/livereload.js"></script>
