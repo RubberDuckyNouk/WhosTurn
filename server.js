@@ -159,13 +159,23 @@ app.get("/api/auth/me", async (req, res) => {
     }
 });
 
-// Middleware for routes that require login (not applied yet — ticket 25)
-function requireLogin(req, res, next) {
-    if (!req.session.groupId) {
+// Auth gate — require login for all routes except public paths
+app.use((req, res, next) => {
+    // Skip auth for public paths
+    const publicPaths = ["/login", "/signup", "/api/auth/login", "/api/auth/signup", "/api/grades"];
+    if (publicPaths.includes(req.path)) return next();
+
+    // Skip if already logged in
+    if (req.session.groupId) return next();
+
+    // API routes return 401 JSON
+    if (req.path.startsWith("/api/")) {
         return res.status(401).json({ error: "Login required" });
     }
-    next();
-}
+
+    // Page routes redirect to login
+    res.redirect("/login");
+});
 
 // Auth pages
 app.get("/login", (req, res) => {
