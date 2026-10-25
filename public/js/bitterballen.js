@@ -41,20 +41,20 @@ function renderThermometer(points, target) {
     const text = document.getElementById("indexText");
 
     const percentage = Math.round((points / target) * 100);
-    const barWidth = Math.min(percentage, 100);
+    const barWidth = Math.min(percentage / 2.5, 100); // scale bar to 250% max
 
     bar.style.width = barWidth + "%";
     bar.textContent = percentage + "%";
     bar.setAttribute("aria-valuenow", percentage);
 
     // Colour stops
-    if (percentage > 100) {
+    if (percentage >= 200) {
         bar.className = "progress-bar";
-        bar.style.backgroundColor = "#e91e8c";
-    } else if (percentage >= 67) {
+        bar.style.backgroundColor = "#e91e8c"; // magenta
+    } else if (percentage >= 100) {
         bar.className = "progress-bar bg-success";
         bar.style.backgroundColor = "";
-    } else if (percentage >= 34) {
+    } else if (percentage >= 50) {
         bar.className = "progress-bar bg-warning";
         bar.style.backgroundColor = "";
     } else {
@@ -69,10 +69,12 @@ function renderThermometer(points, target) {
         text.textContent = "Some effort, but the bitterballen are still frozen...";
     } else if (percentage < 100) {
         text.textContent = "Getting warm! The bitterballen are almost ready!";
-    } else if (percentage === 100) {
+    } else if (percentage < 150) {
         text.textContent = "BITTERBALLEN! Everyone crushed it!";
+    } else if (percentage < 250) {
+        text.textContent = "Someone set a new PR! MEGA BITTERBALLEN!";
     } else {
-        text.textContent = "MEGA BITTERBALLEN! You animals went beyond!";
+        text.textContent = "Multiple new PRs! ULTRA BITTERBALLEN! You animals!";
     }
 }
 

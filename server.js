@@ -548,13 +548,14 @@ app.post("/api/climbs", async (req, res) => {
 // Get current session climbs and PRs
 app.get("/api/climbs/current", async (req, res) => {
     try {
-        // Calculate last Thursday (or today if it's Thursday)
+        // Calculate last Thursday (or today if it's Thursday) as a plain date string
+        // to avoid timezone issues when comparing against DATE columns
         const now = new Date();
         const day = now.getDay(); // 0=Sun, 4=Thu
         const daysSinceThursday = (day >= 4) ? (day - 4) : (day + 3);
         const lastThursday = new Date(now);
         lastThursday.setDate(now.getDate() - daysSinceThursday);
-        lastThursday.setHours(0, 0, 0, 0);
+        const lastThursdayStr = lastThursday.toISOString().split("T")[0];
 
         // Get bitterballen-participating members
         const membersResult = await pool.query("SELECT id, name FROM members WHERE bitterballen = true AND group_id = $1 ORDER BY name", [req.session.groupId]);
@@ -568,7 +569,7 @@ app.get("/api/climbs/current", async (req, res) => {
              WHERE s.payer_id IS NOT NULL
                AND s.session_date >= $1
                AND s.group_id = $2`,
-            [lastThursday, req.session.groupId]
+            [lastThursdayStr, req.session.groupId]
         );
         const presentAtBeer = new Set(beerAttendance.rows.map(r => r.member_id));
 
@@ -579,9 +580,9 @@ app.get("/api/climbs/current", async (req, res) => {
             // All-time PR (before this session)
             const prBefore = await pool.query(
                 `SELECT grade, grade_value FROM climbs
-                 WHERE member_id = $1 AND climb_date < $2
+                 WHERE member_id = $1 AND climb_date < $2::date
                  ORDER BY grade_value DESC LIMIT 1`,
-                [member.id, lastThursday]
+                [member.id, lastThursdayStr]
             );
 
             // Overall PR (including this session)
@@ -595,15 +596,16 @@ app.get("/api/climbs/current", async (req, res) => {
             // Current session climbs
             const sessionClimbs = await pool.query(
                 `SELECT grade, grade_value FROM climbs
-                 WHERE member_id = $1 AND climb_date >= $2
+                 WHERE member_id = $1 AND climb_date >= $2::date
                  ORDER BY grade_value DESC`,
-                [member.id, lastThursday]
+                [member.id, lastThursdayStr]
             );
 
+            const hasPrHistory = prBefore.rows.length > 0;
             const prBeforeValue = prBefore.rows[0]?.grade_value ?? -1;
             const sessionHighValue = sessionClimbs.rows[0]?.grade_value ?? -1;
-            const isNewPr = sessionHighValue > prBeforeValue && sessionClimbs.rows.length > 0;
-            const climbedAtPr = sessionHighValue >= prBeforeValue && prBeforeValue >= 0 && sessionClimbs.rows.length > 0;
+            const isNewPr = hasPrHistory && sessionHighValue > prBeforeValue;
+            const climbedAtPr = hasPrHistory && sessionHighValue >= prBeforeValue;
 
             // A member is "present" if they have climbs or were in a beer session
             const isPresent = sessionClimbs.rows.length > 0 || presentAtBeer.has(member.id);
@@ -618,6 +620,7 @@ app.get("/api/climbs/current", async (req, res) => {
                 climbed_at_pr: climbedAtPr,
                 is_present: isPresent,
                 pr_before_value: prBeforeValue,
+                has_pr_history: hasPrHistory,
                 climbs: sessionClimbs.rows
             });
         }
@@ -626,28 +629,42 @@ app.get("/api/climbs/current", async (req, res) => {
         const presentCount = data.filter(d => d.is_present).length;
         const share = presentCount > 0 ? 1 / presentCount : 0;
 
-        // Calculate points per member
+        // Calculate points per member (best climb only)
+        const PR_BONUS_1 = 0.5;   // 1 member beats PR: +50% → 150%
+        const PR_BONUS_2 = 1.5;   // 2+ members beat PR: +150% → 250%
+
         let totalPoints = 0;
+        let prCount = 0;
         for (const m of data) {
+            const sessionHigh = m.climbs.length > 0 ? m.climbs[0].grade_value : -1;
             let memberPoints = 0;
-            for (const climb of m.climbs) {
-                if (climb.grade_value > m.pr_before_value) {
-                    memberPoints += share * 1.5; // new PR
-                } else if (climb.grade_value === m.pr_before_value) {
-                    memberPoints += share; // at PR
-                } else if (climb.grade_value === m.pr_before_value - 1) {
-                    memberPoints += share / 2; // one below
-                } else if (climb.grade_value === m.pr_before_value - 2) {
-                    memberPoints += share / 5; // two below
-                } else if (m.pr_before_value >= 0) {
-                    memberPoints += share / 10; // anything lower
-                }
+            if (m.climbs.length === 0) {
+                memberPoints = 0;
+            } else if (!m.has_pr_history) {
+                memberPoints = share * 0.1; // no prior history, baseline only
+            } else if (sessionHigh > m.pr_before_value) {
+                memberPoints = share; // new PR (base share, bonus added separately)
+                prCount++;
+            } else if (sessionHigh === m.pr_before_value) {
+                memberPoints = share; // at PR
+            } else if (sessionHigh === m.pr_before_value - 1) {
+                memberPoints = share * 0.2; // one below
+            } else {
+                memberPoints = share * 0.1; // 2+ below
             }
             m.points = memberPoints;
             totalPoints += memberPoints;
             // Clean up intermediate fields from response
             delete m.pr_before_value;
+            delete m.has_pr_history;
             delete m.climbs;
+        }
+
+        // Add hardcoded PR bonus
+        if (prCount >= 2) {
+            totalPoints += PR_BONUS_2;
+        } else if (prCount === 1) {
+            totalPoints += PR_BONUS_1;
         }
 
         res.json({ members: data, bitterballen_index: totalPoints, target: 1.0 });
