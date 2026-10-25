@@ -196,6 +196,10 @@ app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, "views", "index.html"));
 });
 
+app.get("/bier", (req, res) => {
+    res.sendFile(path.join(__dirname, "views", "bier.html"));
+});
+
 // Start the server
 initDatabase().then(() => {
     app.listen(PORT, () => {

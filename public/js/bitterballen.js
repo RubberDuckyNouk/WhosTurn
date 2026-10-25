@@ -41,17 +41,20 @@ function renderThermometer(points, target) {
     const text = document.getElementById("indexText");
 
     const percentage = Math.round((points / target) * 100);
-    const barWidth = Math.min(percentage / 2.5, 100); // scale bar to 250% max
 
-    bar.style.width = barWidth + "%";
+    if (percentage >= 100) {
+        bar.style.width = "100%";
+    } else {
+        bar.style.width = percentage + "%";
+    }
     bar.textContent = percentage + "%";
     bar.setAttribute("aria-valuenow", percentage);
 
-    // Colour stops
-    if (percentage >= 200) {
+    // Colour: pink when over 100%, green at 100%, warning/danger below
+    if (percentage > 100) {
         bar.className = "progress-bar";
-        bar.style.backgroundColor = "#e91e8c"; // magenta
-    } else if (percentage >= 100) {
+        bar.style.backgroundColor = "#e91e8c";
+    } else if (percentage === 100) {
         bar.className = "progress-bar bg-success";
         bar.style.backgroundColor = "";
     } else if (percentage >= 50) {
@@ -168,8 +171,7 @@ function setupForm() {
                 renderThermometer(data.bitterballen_index, data.target);
                 renderMemberStats(data.members);
                 loadRecentClimbs();
-                // Reset grade selection but keep member and date
-                document.getElementById("climbGradeNum").value = "";
+                // Reset plus checkbox but keep member, date, grade number and letter
                 document.getElementById("climbPlus").checked = false;
             } else {
                 const err = await res.json();

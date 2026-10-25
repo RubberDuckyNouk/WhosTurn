@@ -40,6 +40,9 @@
                         <a class="nav-link" href="/">Home</a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" href="/bier">Bier</a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link active" href="/bitterballen">Climbing</a>
                     </li>
                     <li class="nav-item">
@@ -62,6 +65,54 @@
 
     <main class="container my-4">
         <h1>Bitterballen Index</h1>
+
+        <!-- Log a climb form -->
+        <div class="card mt-4">
+            <div class="card-body">
+                <h5 class="card-title">Log a Climb</h5>
+                <form id="climbForm">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-sm">
+                            <label for="climbMember" class="form-label">Member</label>
+                            <select id="climbMember" class="form-select" required>
+                                <option value="">Select member...</option>
+                            </select>
+                        </div>
+                        <div class="col-sm">
+                            <label class="form-label">Grade</label>
+                            <div class="d-flex align-items-center gap-2">
+                                <select id="climbGradeNum" class="form-select" required>
+                                    <option value="">Nr</option>
+                                    <option value="3" selected>3</option>
+                                    <option value="4">4</option>
+                                    <option value="5">5</option>
+                                    <option value="6">6</option>
+                                    <option value="7">7</option>
+                                    <option value="8">8</option>
+                                </select>
+                                <select id="climbGradeLetter" class="form-select" required>
+                                    <option value="a">a</option>
+                                    <option value="b">b</option>
+                                    <option value="c">c</option>
+                                </select>
+                                <div class="form-check mb-0">
+                                    <input class="form-check-input" type="checkbox" id="climbPlus">
+                                    <label class="form-check-label" for="climbPlus">+</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-sm">
+                            <label for="climbDate" class="form-label">Date</label>
+                            <input type="date" id="climbDate" class="form-control">
+                        </div>
+                        <div class="col-sm-auto">
+                            <button type="submit" class="btn btn-primary" id="climbSubmitBtn">Log Climb</button>
+                        </div>
+                    </div>
+                    <div id="climbMessage" class="mt-2"></div>
+                </form>
+            </div>
+        </div>
 
         <!-- Thermometer + explanation -->
         <div class="card mt-4">
@@ -138,54 +189,6 @@
                         </tbody>
                     </table>
                 </div>
-            </div>
-        </div>
-
-        <!-- Log a climb form -->
-        <div class="card mt-4">
-            <div class="card-body">
-                <h5 class="card-title">Log a Climb</h5>
-                <form id="climbForm">
-                    <div class="row g-3 align-items-end">
-                        <div class="col-sm">
-                            <label for="climbMember" class="form-label">Member</label>
-                            <select id="climbMember" class="form-select" required>
-                                <option value="">Select member...</option>
-                            </select>
-                        </div>
-                        <div class="col-sm">
-                            <label class="form-label">Grade</label>
-                            <div class="d-flex align-items-center gap-2">
-                                <select id="climbGradeNum" class="form-select" required>
-                                    <option value="">Nr</option>
-                                    <option value="3">3</option>
-                                    <option value="4">4</option>
-                                    <option value="5">5</option>
-                                    <option value="6">6</option>
-                                    <option value="7">7</option>
-                                    <option value="8">8</option>
-                                </select>
-                                <select id="climbGradeLetter" class="form-select" required>
-                                    <option value="a">a</option>
-                                    <option value="b">b</option>
-                                    <option value="c">c</option>
-                                </select>
-                                <div class="form-check mb-0">
-                                    <input class="form-check-input" type="checkbox" id="climbPlus">
-                                    <label class="form-check-label" for="climbPlus">+</label>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-sm">
-                            <label for="climbDate" class="form-label">Date</label>
-                            <input type="date" id="climbDate" class="form-control">
-                        </div>
-                        <div class="col-sm-auto">
-                            <button type="submit" class="btn btn-primary" id="climbSubmitBtn">Log Climb</button>
-                        </div>
-                    </div>
-                    <div id="climbMessage" class="mt-2"></div>
-                </form>
             </div>
         </div>
 
