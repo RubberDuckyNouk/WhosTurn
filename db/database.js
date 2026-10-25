@@ -1,5 +1,6 @@
 require("dotenv").config();
 const { Pool } = require("pg");
+const bcrypt = require("bcrypt");
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -96,6 +97,31 @@ async function initDatabase() {
         await pool.query(`ALTER TABLE members DROP COLUMN IF EXISTS pay_group`);
         await pool.query(`ALTER TABLE members DROP COLUMN IF EXISTS pay_balance`);
         await pool.query(`ALTER TABLE sessions DROP COLUMN IF EXISTS pay_group`);
+    }
+
+    // --- Migration: add group_id to data tables and seed default group ---
+
+    await pool.query(`ALTER TABLE members ADD COLUMN IF NOT EXISTS group_id INTEGER REFERENCES groups(id)`);
+    await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS group_id INTEGER REFERENCES groups(id)`);
+    await pool.query(`ALTER TABLE climbs ADD COLUMN IF NOT EXISTS group_id INTEGER REFERENCES groups(id)`);
+
+    // Create default group if it doesn't exist, then backfill
+    const defaultGroup = await pool.query(`SELECT id FROM groups WHERE name = 'Witte 6Bami'`);
+    if (defaultGroup.rows.length === 0) {
+        const hash = await bcrypt.hash("BaanKwijt", 10);
+        await pool.query(
+            `INSERT INTO groups (name, email, password_hash) VALUES ('Witte 6Bami', 'admin@whosturn.app', $1)`,
+            [hash]
+        );
+    }
+
+    // Backfill: assign any rows without a group to the default group
+    const group = await pool.query(`SELECT id FROM groups WHERE name = 'Witte 6Bami'`);
+    if (group.rows.length > 0) {
+        const groupId = group.rows[0].id;
+        await pool.query(`UPDATE members SET group_id = $1 WHERE group_id IS NULL`, [groupId]);
+        await pool.query(`UPDATE sessions SET group_id = $1 WHERE group_id IS NULL`, [groupId]);
+        await pool.query(`UPDATE climbs SET group_id = $1 WHERE group_id IS NULL`, [groupId]);
     }
 
     console.log("Database initialized — tables ready");
