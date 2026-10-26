@@ -5,16 +5,21 @@
 
         const group = await res.json();
         const userNav = document.getElementById("userNav");
-        const navGroupName = document.getElementById("navGroupName");
 
-        if (userNav && navGroupName) {
-            navGroupName.textContent = group.name;
+        if (userNav) {
             userNav.classList.remove("d-none");
+        }
+
+        const brandGroupName = document.getElementById("brandGroupName");
+        if (brandGroupName) {
+            brandGroupName.textContent = group.name;
+            brandGroupName.classList.remove("d-none");
         }
 
         const logoutBtn = document.getElementById("logoutBtn");
         if (logoutBtn) {
-            logoutBtn.addEventListener("click", async () => {
+            logoutBtn.addEventListener("click", async (e) => {
+                e.preventDefault();
                 await fetch("/api/auth/logout", { method: "POST" });
                 window.location.href = "/login";
             });

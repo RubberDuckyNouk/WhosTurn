@@ -22,7 +22,10 @@
     <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container">
-            <a class="navbar-brand" href="/">Klimbier</a>
+            <div class="d-flex align-items-center overflow-hidden me-2">
+                <a class="navbar-brand mb-0" href="/">Klimbier</a>
+                <span id="brandGroupName" class="text-secondary d-none text-truncate" style="max-width: 40vw;"></span>
+            </div>
 
             <!-- Hamburger button (shows on small screens) -->
             <button class="navbar-toggler" type="button"
@@ -48,16 +51,15 @@
                         <a class="nav-link" href="/stats">Stats</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/settings">Settings</a>
-                    </li>
-                    <li class="nav-item">
                         <a class="nav-link" href="/info">Info</a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/settings">Settings</a>
+                    </li>
+                    <li id="userNav" class="nav-item d-none mt-2">
+                        <a href="#" id="logoutBtn" class="nav-link text-danger">Logout</a>
+                    </li>
                 </ul>
-                <span id="userNav" class="navbar-text ms-3 d-none">
-                    <span id="navGroupName"></span>
-                    <button id="logoutBtn" class="btn btn-sm btn-outline-light ms-2">Logout</button>
-                </span>
             </div>
         </div>
     </nav>
@@ -65,6 +67,20 @@
     <main class="container my-4">
         <h1>Klimbier</h1>
         <p>Welcome to the climbing group tracker.</p>
+
+        <!-- Welcome card for new groups (hidden by default) -->
+        <div id="welcomeCard" class="card border-primary mb-4 d-none">
+            <div class="card-body text-center">
+                <h4 class="card-title"><i class="bi bi-people-fill me-2"></i>Welcome to Klimbier!</h4>
+                <p class="card-text">
+                    Your group doesn't have any members yet.<br>
+                    Add your climbing buddies in Settings to start tracking turns.
+                </p>
+                <a href="/settings" class="btn btn-primary">
+                    <i class="bi bi-gear me-1"></i>Go to Settings
+                </a>
+            </div>
+        </div>
 
         <!-- Updates / Announcements -->
         <div class="card mt-4">
@@ -130,6 +146,18 @@
 
     <!-- Navbar (auth) -->
     <script src="/js/navbar.js"></script>
+
+    <!-- Show welcome card if group has no members -->
+    <script>
+        fetch('/api/members')
+            .then(r => r.json())
+            .then(members => {
+                if (Array.isArray(members) && members.length === 0) {
+                    document.getElementById('welcomeCard').classList.remove('d-none');
+                }
+            })
+            .catch(() => {});
+    </script>
 
     <!-- Live reload -->
     <script src="http://localhost:35729/livereload.js"></script>
