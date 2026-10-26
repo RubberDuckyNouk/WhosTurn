@@ -66,6 +66,20 @@
         <h1>Klimbier</h1>
         <p>Welcome to the climbing group tracker.</p>
 
+        <!-- Welcome card for new groups (hidden by default) -->
+        <div id="welcomeCard" class="card border-primary mb-4 d-none">
+            <div class="card-body text-center">
+                <h4 class="card-title"><i class="bi bi-people-fill me-2"></i>Welcome to Klimbier!</h4>
+                <p class="card-text">
+                    Your group doesn't have any members yet.<br>
+                    Add your climbing buddies in Settings to start tracking turns.
+                </p>
+                <a href="/settings" class="btn btn-primary">
+                    <i class="bi bi-gear me-1"></i>Go to Settings
+                </a>
+            </div>
+        </div>
+
         <!-- Updates / Announcements -->
         <div class="card mt-4">
             <div class="card-body">
@@ -130,6 +144,18 @@
 
     <!-- Navbar (auth) -->
     <script src="/js/navbar.js"></script>
+
+    <!-- Show welcome card if group has no members -->
+    <script>
+        fetch('/api/members')
+            .then(r => r.json())
+            .then(members => {
+                if (Array.isArray(members) && members.length === 0) {
+                    document.getElementById('welcomeCard').classList.remove('d-none');
+                }
+            })
+            .catch(() => {});
+    </script>
 
     <!-- Live reload -->
     <script src="http://localhost:35729/livereload.js"></script>
