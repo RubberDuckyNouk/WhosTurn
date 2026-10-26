@@ -226,8 +226,12 @@ app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, "views", "index.html"));
 });
 
-app.get("/bier", (req, res) => {
+app.get("/beer", (req, res) => {
     res.sendFile(path.join(__dirname, "views", "bier.html"));
+});
+
+app.get("/bier", (req, res) => {
+    res.redirect("/beer");
 });
 
 // Start the server
