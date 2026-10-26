@@ -20,6 +20,7 @@
         if (logoutBtn) {
             logoutBtn.addEventListener("click", async (e) => {
                 e.preventDefault();
+                if (!confirm("Are you sure you want to log out?")) return;
                 await fetch("/api/auth/logout", { method: "POST" });
                 window.location.href = "/login";
             });
