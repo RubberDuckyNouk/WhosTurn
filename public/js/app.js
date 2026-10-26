@@ -58,7 +58,7 @@ async function loadKarma() {
                 <li class="list-group-item d-flex justify-content-between align-items-center">
                     ${m.name}
                     <span>
-                        <i class="bi bi-cup-straw me-1"></i><span class="badge ${beerCls}">${m.beer_balance > 0 ? "+" : ""}${m.beer_balance}</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 16 16" fill="currentColor" class="me-1" style="vertical-align:-0.125em;"><path d="M3.5 2 h9 l-1.2 12 h-6.6 z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><ellipse cx="6.5" cy="2" rx="2.5" ry="1.5" /><ellipse cx="9.5" cy="2" rx="2.5" ry="1.5"/><ellipse cx="8" cy="1.5" rx="2.2" ry="1.6"/></svg><span class="badge ${beerCls}">${m.beer_balance > 0 ? "+" : ""}${m.beer_balance}</span>
                     </span>
                 </li>
             `;

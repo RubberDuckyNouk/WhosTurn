@@ -586,20 +586,15 @@ app.post("/api/climbs", async (req, res) => {
 // Get current session climbs and PRs
 app.get("/api/climbs/current", async (req, res) => {
     try {
-        // Calculate last Thursday (or today if it's Thursday) as a plain date string
-        // to avoid timezone issues when comparing against DATE columns
-        const now = new Date();
-        const day = now.getDay(); // 0=Sun, 4=Thu
-        const daysSinceThursday = (day >= 4) ? (day - 4) : (day + 3);
-        const lastThursday = new Date(now);
-        lastThursday.setDate(now.getDate() - daysSinceThursday);
-        const lastThursdayStr = lastThursday.toISOString().split("T")[0];
+        // Today's date as a plain date string to avoid timezone issues
+        // when comparing against DATE columns — session resets daily at midnight
+        const todayStr = new Date().toISOString().split("T")[0];
 
         // Get bitterballen-participating members
         const membersResult = await pool.query("SELECT id, name FROM members WHERE bitterballen = true AND group_id = $1 ORDER BY name", [req.session.groupId]);
         const members = membersResult.rows;
 
-        // Check which members were present at a beer session since last Thursday
+        // Check which members were present at a beer session today
         const beerAttendance = await pool.query(
             `SELECT DISTINCT sa.member_id
              FROM session_attendance sa
@@ -607,7 +602,7 @@ app.get("/api/climbs/current", async (req, res) => {
              WHERE s.payer_id IS NOT NULL
                AND s.session_date >= $1
                AND s.group_id = $2`,
-            [lastThursdayStr, req.session.groupId]
+            [todayStr, req.session.groupId]
         );
         const presentAtBeer = new Set(beerAttendance.rows.map(r => r.member_id));
 
@@ -620,7 +615,7 @@ app.get("/api/climbs/current", async (req, res) => {
                 `SELECT grade, grade_value FROM climbs
                  WHERE member_id = $1 AND climb_date < $2::date
                  ORDER BY grade_value DESC LIMIT 1`,
-                [member.id, lastThursdayStr]
+                [member.id, todayStr]
             );
 
             // Overall PR (including this session)
@@ -636,7 +631,7 @@ app.get("/api/climbs/current", async (req, res) => {
                 `SELECT grade, grade_value FROM climbs
                  WHERE member_id = $1 AND climb_date >= $2::date
                  ORDER BY grade_value DESC`,
-                [member.id, lastThursdayStr]
+                [member.id, todayStr]
             );
 
             const hasPrHistory = prBefore.rows.length > 0;
@@ -712,17 +707,25 @@ app.get("/api/climbs/current", async (req, res) => {
     }
 });
 
-// Get last 10 logged climbs
+// Get recent climbs with optional date filter
 app.get("/api/climbs/recent", async (req, res) => {
     const groupId = req.session.groupId;
+    const filter = req.query.filter || "today";
     try {
+        let dateCondition;
+        if (filter === "month") {
+            dateCondition = "c.climb_date >= date_trunc('month', CURRENT_DATE)";
+        } else {
+            dateCondition = "c.climb_date = CURRENT_DATE";
+        }
+
         const result = await pool.query(
             `SELECT c.id, c.grade, c.climb_date, m.name AS member_name
              FROM climbs c
              JOIN members m ON c.member_id = m.id
              WHERE c.group_id = $1
-             ORDER BY c.id DESC
-             LIMIT 10`,
+               AND ${dateCondition}
+             ORDER BY c.id DESC`,
             [groupId]
         );
         res.json(result.rows);

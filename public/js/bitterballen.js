@@ -8,6 +8,9 @@ function showConnectionError() {
     document.body.prepend(banner);
 }
 
+// Current climb filter
+let climbFilter = "today";
+
 // Load everything on page load
 document.addEventListener("DOMContentLoaded", () => {
     loadClimbData();
@@ -15,6 +18,20 @@ document.addEventListener("DOMContentLoaded", () => {
     setupForm();
     loadRecentClimbs();
     loadBitterballenOrders();
+
+    // Climb filter event listeners
+    document.querySelectorAll(".climb-filter").forEach(btn => {
+        btn.addEventListener("click", () => {
+            document.querySelectorAll(".climb-filter").forEach(b => {
+                b.classList.remove("btn-primary", "active");
+                b.classList.add("btn-outline-primary");
+            });
+            btn.classList.remove("btn-outline-primary");
+            btn.classList.add("btn-primary", "active");
+            climbFilter = btn.dataset.filter;
+            loadRecentClimbs();
+        });
+    });
 
     document.getElementById("orderBtn").addEventListener("click", orderBitterballen);
     document.getElementById("orderModal").addEventListener("show.bs.modal", () => {
@@ -189,7 +206,7 @@ function setupForm() {
 
 async function loadRecentClimbs() {
     try {
-        const res = await fetch("/api/climbs/recent");
+        const res = await fetch(`/api/climbs/recent?filter=${climbFilter}`);
         const climbs = await res.json();
         const container = document.getElementById("recentClimbs");
 
