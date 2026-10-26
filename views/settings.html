@@ -23,7 +23,10 @@
     <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container">
-            <a class="navbar-brand" href="/">Klimbier</a>
+            <div class="d-flex align-items-center overflow-hidden me-2">
+                <a class="navbar-brand mb-0" href="/">Klimbier</a>
+                <span id="brandGroupName" class="text-secondary d-none text-truncate" style="max-width: 40vw;"></span>
+            </div>
 
             <!-- Hamburger button (shows on small screens) -->
             <button class="navbar-toggler" type="button"
@@ -49,16 +52,15 @@
                         <a class="nav-link" href="/stats">Stats</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link active" href="/settings">Settings</a>
-                    </li>
-                    <li class="nav-item">
                         <a class="nav-link" href="/info">Info</a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/settings">Settings</a>
+                    </li>
+                    <li id="userNav" class="nav-item d-none mt-2">
+                        <a href="#" id="logoutBtn" class="nav-link text-danger">Logout</a>
+                    </li>
                 </ul>
-                <span id="userNav" class="navbar-text ms-3 d-none">
-                    <span id="navGroupName"></span>
-                    <button id="logoutBtn" class="btn btn-sm btn-outline-light ms-2">Logout</button>
-                </span>
             </div>
         </div>
     </nav>
@@ -98,6 +100,39 @@
         <div class="mt-4">
             <h5>Members</h5>
             <div id="memberList"></div>
+        </div>
+
+        <!-- Account Settings -->
+        <div class="card mt-4">
+            <div class="card-body">
+                <h5 class="card-title">Account</h5>
+                <div id="accountDisplay">
+                    <p class="mb-1"><strong>Group Name:</strong> <span id="accountName"></span></p>
+                    <p class="mb-2"><strong>Email:</strong> <span id="accountEmail"></span></p>
+                    <button class="btn btn-outline-primary btn-sm" id="editAccountBtn">
+                        <i class="bi bi-pencil me-1"></i>Edit
+                    </button>
+                </div>
+                <div id="accountEdit" class="d-none">
+                    <div class="mb-3">
+                        <label for="groupName" class="form-label">Group Name</label>
+                        <input type="text" class="form-control" id="groupName">
+                    </div>
+                    <div class="mb-3">
+                        <label for="groupEmail" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="groupEmail">
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-success btn-sm" id="saveAccountBtn">
+                            <i class="bi bi-check-lg me-1"></i>Save
+                        </button>
+                        <button class="btn btn-secondary btn-sm" id="cancelAccountBtn">
+                            <i class="bi bi-x-lg me-1"></i>Cancel
+                        </button>
+                    </div>
+                    <div id="accountMessage" class="mt-2"></div>
+                </div>
+            </div>
         </div>
     </main>
 

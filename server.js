@@ -164,6 +164,36 @@ app.get("/api/auth/me", async (req, res) => {
     }
 });
 
+// Update group name or email
+app.patch("/api/auth/group", async (req, res) => {
+    const groupId = req.session.groupId;
+    if (!groupId) {
+        return res.status(401).json({ error: "Not logged in" });
+    }
+
+    const { name, email } = req.body;
+    if (!name || !name.trim() || !email || !email.trim()) {
+        return res.status(400).json({ error: "Group name and email are required" });
+    }
+
+    try {
+        // Check for duplicate group name (excluding self)
+        const existing = await pool.query("SELECT id FROM groups WHERE name = $1 AND id != $2", [name.trim(), groupId]);
+        if (existing.rows.length > 0) {
+            return res.status(409).json({ error: "Group name already taken" });
+        }
+
+        const result = await pool.query(
+            "UPDATE groups SET name = $1, email = $2 WHERE id = $3 RETURNING id, name, email",
+            [name.trim(), email.trim(), groupId]
+        );
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to update group" });
+    }
+});
+
 // Auth gate — require login for all routes except public paths
 app.use((req, res, next) => {
     // Skip auth for public paths

@@ -177,6 +177,69 @@ function showMessage(text, type) {
     msgDiv.innerHTML = `<span class="text-${type}">${text}</span>`;
 }
 
+let currentAccount = {};
+
+async function loadAccount() {
+    try {
+        const res = await fetch("/api/auth/me");
+        currentAccount = await res.json();
+        document.getElementById("accountName").textContent = currentAccount.name || "";
+        document.getElementById("accountEmail").textContent = currentAccount.email || "";
+    } catch (err) {
+        console.error("Failed to load account:", err);
+    }
+}
+
+function showAccountEdit() {
+    document.getElementById("groupName").value = currentAccount.name || "";
+    document.getElementById("groupEmail").value = currentAccount.email || "";
+    document.getElementById("accountMessage").innerHTML = "";
+    document.getElementById("accountDisplay").classList.add("d-none");
+    document.getElementById("accountEdit").classList.remove("d-none");
+}
+
+function cancelAccountEdit() {
+    document.getElementById("accountEdit").classList.add("d-none");
+    document.getElementById("accountDisplay").classList.remove("d-none");
+}
+
+async function saveAccount() {
+    const name = document.getElementById("groupName").value.trim();
+    const email = document.getElementById("groupEmail").value.trim();
+    const msgDiv = document.getElementById("accountMessage");
+
+    if (!name || !email) {
+        msgDiv.innerHTML = '<span class="text-danger">Group name and email are required</span>';
+        return;
+    }
+
+    try {
+        const res = await fetch("/api/auth/group", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, email })
+        });
+
+        if (res.ok) {
+            currentAccount = await res.json();
+            document.getElementById("accountName").textContent = currentAccount.name;
+            document.getElementById("accountEmail").textContent = currentAccount.email;
+            const brandName = document.getElementById("brandGroupName");
+            if (brandName) brandName.textContent = currentAccount.name;
+            cancelAccountEdit();
+        } else {
+            const data = await res.json();
+            msgDiv.innerHTML = `<span class="text-danger">${data.error}</span>`;
+        }
+    } catch (err) {
+        console.error("Failed to save account:", err);
+    }
+}
+
 document.getElementById("addMemberBtn").addEventListener("click", addMember);
+document.getElementById("editAccountBtn").addEventListener("click", showAccountEdit);
+document.getElementById("saveAccountBtn").addEventListener("click", saveAccount);
+document.getElementById("cancelAccountBtn").addEventListener("click", cancelAccountEdit);
 
 loadMembers();
+loadAccount();

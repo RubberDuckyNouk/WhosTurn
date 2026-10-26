@@ -37,12 +37,33 @@
                     </div>
                     <button type="submit" class="btn btn-primary w-100">Log In</button>
                 </form>
-                <p class="text-center mt-3 mb-0">
+                <div class="text-center mt-3">
+                    <a href="#" data-bs-toggle="modal" data-bs-target="#forgotModal">Forgot password?</a>
+                </div>
+                <p class="text-center mt-2 mb-0">
                     Don't have a group? <a href="/signup">Create one</a>
                 </p>
             </div>
         </div>
     </main>
+
+    <!-- Forgot Password Modal -->
+    <div class="modal fade" id="forgotModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Forgot Password</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    Forgot your login details? Too bad, Nouk hasn't set up an emailing service yet! Leave a note for Nouk with your group name or associated mail adress and Nouk will send you a new password (faster if you buy them a beer).
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Bootstrap 5 JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
