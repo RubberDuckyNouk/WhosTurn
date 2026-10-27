@@ -65,7 +65,7 @@ async function loadClimbData() {
         const res = await fetch("/api/climbs/current");
         const data = await res.json();
 
-        renderThermometer(data.bitterballen_index, data.target);
+        renderThermometer(data.bitterballen_index, data.target, data.members);
         renderMemberStats(data.members);
         renderAttendanceCheckboxes(data.members);
     } catch (err) {
@@ -74,11 +74,17 @@ async function loadClimbData() {
     }
 }
 
-function renderThermometer(points, target) {
+function renderThermometer(points, target, members) {
     const bar = document.getElementById("thermometer");
     const text = document.getElementById("indexText");
 
     const percentage = Math.round((points / target) * 100);
+
+    // Pick random present member names for personalized phrases
+    const present = (members || []).filter(m => m.is_present);
+    const randomName = present.length > 0 ? present[Math.floor(Math.random() * present.length)].name : "Someone";
+    const othersPool = present.filter(m => m.name !== randomName);
+    const targetName = othersPool.length > 0 ? othersPool[Math.floor(Math.random() * othersPool.length)].name : randomName;
 
     if (percentage >= 100) {
         bar.style.width = "100%";
@@ -103,20 +109,72 @@ function renderThermometer(points, target) {
         bar.style.backgroundColor = "";
     }
 
-    // Explanation text
-    if (percentage === 0) {
-        text.textContent = "Nobody has climbed at their max yet. Get going!";
-    } else if (percentage < 50) {
-        text.textContent = "Some effort, but the bitterballen are still frozen...";
-    } else if (percentage < 100) {
-        text.textContent = "Getting warm! The bitterballen are almost ready!";
-    } else if (percentage < 150) {
-        text.textContent = "BITTERBALLEN! Everyone crushed it!";
-    } else if (percentage < 250) {
-        text.textContent = "Someone set a new PR! MEGA BITTERBALLEN!";
-    } else {
-        text.textContent = "Multiple new PRs! ULTRA BITTERBALLEN! You animals!";
-    }
+    // Explanation text — pick a random phrase for the current range
+    const phrases = [
+        [0,   0,   ["The fryer is cold. Somebody climb something!",
+                     "Zero points. The bitterballen are judging you.",
+                     "Nothing yet. The oil is ice cold.",
+                     "Bregje hasn't even turned on the fryer yet.",
+                     `${randomName}, do something! The bitterballen are waiting!`]],
+        [1,   19,  ["The oil isn't even warm yet... come on!",
+                     "A flicker of hope, but the fryer disagrees.",
+                     "Somewhere, a bitterbal just sighed.",
+                     `${randomName} is trying. Bregje is not impressed.`,
+                     "Tell Bregje to preheat the airfryer... just in case.",
+                     `Peer pressure ${targetName} into climbing harder!`]],
+        [20,  39,  ["Some effort, but the bitterballen are still frozen...",
+                     "The freezer door is open. That's a start.",
+                     "Lukewarm at best. The bitterballen are unimpressed.",
+                     `${randomName} believes. The fryer does not.`,
+                     "Bregje glances at the fryer. Not yet.",
+                     `Maybe yell at ${targetName} a little? For the bitterballen.`]],
+        [40,  59,  ["Getting there. The oil is starting to bubble.",
+                     "Halfway-ish! The bitterballen see potential.",
+                     "The fryer is warming up. Don't stop now!",
+                     `Come on ${randomName}, push it to the next level!`,
+                     "Tell Bregje to preheat the airfryer!",
+                     `${targetName} could climb harder. Just saying.`]],
+        [60,  79,  ["The bitterballen are defrosting! Keep pushing!",
+                     "You can hear the oil sizzling. Keep going!",
+                     "The kitchen smells promising!",
+                     `${randomName} is carrying the team right now!`,
+                     "Bregje is eyeing the freezer. Almost time.",
+                     `Somebody peer pressure ${targetName} into sending that project!`]],
+        [80,  99,  ["Almost! You can smell them frying!",
+                     "SO close. One more good climb and they're yours!",
+                     "The bitterballen are turning golden... almost there!",
+                     `${randomName}, one more send and it's bitterballen time!`,
+                     "Bregje has the fryer on standby!",
+                     `${targetName}, this one's on you. Climb harder!`]],
+        [100, 119, ["BITTERBALLEN! Golden and crispy!",
+                     "100%! Somebody order a portion!",
+                     "The fryer delivers! Bitterballen earned!",
+                     `${randomName} helped make it happen! Bitterballen!`,
+                     "Bregje, one portion of bitterballen please!"]],
+        [120, 149, ["Extra mayo earned! What a session!",
+                     "Exceeding expectations! The kitchen is buzzing!",
+                     "Above and beyond! Double dipping allowed!",
+                     `${randomName} is on fire today!`,
+                     "Jasper is nodding approvingly from behind the bar."]],
+        [150, 199, ["MEGA BITTERBALLEN! Someone's showing off!",
+                     "The fryer is working overtime!",
+                     "At this rate, order two portions!",
+                     `${randomName} is absolutely sending it!`,
+                     "Jasper thinks you should order TWO portions!"]],
+        [200, 299, ["ULTRA BITTERBALLEN! PRs are falling like dominoes!",
+                     "The fryer just caught fire! In a good way!",
+                     "Absolute scenes! The bitterballen can't keep up!",
+                     `${randomName} broke the scale! Jasper is speechless!`,
+                     "Bregje can't fry them fast enough!"]],
+        [300, Infinity, ["LEGENDARY SESSION! The fryer can't keep up with you animals!",
+                          "Someone call the fire department! This session is on fire!",
+                          "They'll write songs about this session.",
+                          "Jasper is closing the bar to make more bitterballen.",
+                          `${randomName} just became a legend. Bregje is in tears.`]]
+    ];
+
+    const pool = phrases.find(([min, max]) => percentage >= min && percentage <= max)[2];
+    text.textContent = pool[Math.floor(Math.random() * pool.length)];
 }
 
 function climbTypeBadge(type) {
@@ -244,7 +302,7 @@ function setupForm() {
                 setTimeout(() => { messageDiv.innerHTML = ""; }, 3000);
 
                 // Refresh the data display
-                renderThermometer(data.bitterballen_index, data.target);
+                renderThermometer(data.bitterballen_index, data.target, data.members);
                 renderMemberStats(data.members);
                 loadRecentClimbs();
                 // Reset plus checkbox and type but keep member, date, grade number and letter
