@@ -184,6 +184,10 @@ function setupForm() {
                 if (member && (member.is_new_pr || member.climbed_at_pr)) {
                     confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
                 }
+                // Show success feedback
+                messageDiv.innerHTML = `<span class="text-success">Logged ${grade} for ${document.getElementById("climbMember").selectedOptions[0].text}</span>`;
+                setTimeout(() => { messageDiv.innerHTML = ""; }, 3000);
+
                 // Refresh the data display
                 renderThermometer(data.bitterballen_index, data.target);
                 renderMemberStats(data.members);
