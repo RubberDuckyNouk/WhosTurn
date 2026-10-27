@@ -686,15 +686,19 @@ app.get("/api/climbs/current", async (req, res) => {
             });
         }
 
-        // Only count present members for the share denominator
+        // Point values per scenario (raw, before dividing by present count)
+        const POINTS_NEW_PR = 120;
+        const POINTS_AT_PR = 100;
+        const POINTS_1_BELOW = 50;
+        const POINTS_2_BELOW = 30;
+        const POINTS_3_BELOW = 10;
+        const POINTS_NO_HISTORY = 40;
+        const PR_BONUS_1 = 50;    // 1 member beats PR
+        const PR_BONUS_2 = 150;   // 2+ members beat PR
+
         const presentCount = data.filter(d => d.is_present).length;
-        const share = presentCount > 0 ? 1 / presentCount : 0;
 
-        // Calculate points per member (best climb only)
-        const PR_BONUS_1 = 0.5;   // 1 member beats PR: +50% → 150%
-        const PR_BONUS_2 = 1.5;   // 2+ members beat PR: +150% → 250%
-
-        let totalPoints = 0;
+        let rawTotal = 0;
         let prCount = 0;
         for (const m of data) {
             const sessionHigh = m.climbs.length > 0 ? m.climbs[0].grade_value : -1;
@@ -702,33 +706,37 @@ app.get("/api/climbs/current", async (req, res) => {
             if (m.climbs.length === 0) {
                 memberPoints = 0;
             } else if (!m.has_pr_history) {
-                memberPoints = share * 0.1; // no prior history, baseline only
+                memberPoints = POINTS_NO_HISTORY;
             } else if (sessionHigh > m.pr_before_value) {
-                memberPoints = share; // new PR (base share, bonus added separately)
+                memberPoints = POINTS_NEW_PR;
                 prCount++;
             } else if (sessionHigh === m.pr_before_value) {
-                memberPoints = share; // at PR
+                memberPoints = POINTS_AT_PR;
             } else if (sessionHigh === m.pr_before_value - 1) {
-                memberPoints = share * 0.2; // one below
+                memberPoints = POINTS_1_BELOW;
+            } else if (sessionHigh === m.pr_before_value - 2) {
+                memberPoints = POINTS_2_BELOW;
             } else {
-                memberPoints = share * 0.1; // 2+ below
+                memberPoints = POINTS_3_BELOW;
             }
             m.points = memberPoints;
-            totalPoints += memberPoints;
+            rawTotal += memberPoints;
             // Clean up intermediate fields from response
             delete m.pr_before_value;
             delete m.has_pr_history;
             delete m.climbs;
         }
 
-        // Add hardcoded PR bonus
+        // Add PR bonus to raw total
         if (prCount >= 2) {
-            totalPoints += PR_BONUS_2;
+            rawTotal += PR_BONUS_2;
         } else if (prCount === 1) {
-            totalPoints += PR_BONUS_1;
+            rawTotal += PR_BONUS_1;
         }
 
-        res.json({ members: data, bitterballen_index: totalPoints, target: 1.0 });
+        const bitterballenIndex = presentCount > 0 ? rawTotal / presentCount : 0;
+
+        res.json({ members: data, bitterballen_index: bitterballenIndex, target: 100 });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Failed to fetch climb data" });
