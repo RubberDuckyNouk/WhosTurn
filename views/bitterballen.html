@@ -107,6 +107,16 @@
                             </div>
                         </div>
                         <div class="col-sm">
+                            <div id="climbTypeGroup" class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="climbType" id="typeAttempted" value="attempted" autocomplete="off">
+                                <label class="btn btn-outline-secondary" for="typeAttempted">Attempt</label>
+                                <input type="radio" class="btn-check" name="climbType" id="typeClimbed" value="climbed" autocomplete="off">
+                                <label class="btn btn-outline-primary" for="typeClimbed">Top</label>
+                                <input type="radio" class="btn-check" name="climbType" id="typeFlashed" value="flashed" autocomplete="off">
+                                <label class="btn btn-outline-warning" for="typeFlashed">Flash</label>
+                            </div>
+                        </div>
+                        <div class="col-sm">
                             <label for="climbDate" class="form-label">Date</label>
                             <input type="date" id="climbDate" class="form-control">
                         </div>
@@ -211,6 +221,7 @@
                                 <th>PR</th>
                                 <th>Climbs</th>
                                 <th>Session High</th>
+                                <th>Points</th>
                                 <th>Status</th>
                             </tr>
                         </thead>

@@ -119,6 +119,13 @@ function renderThermometer(points, target) {
     }
 }
 
+function climbTypeBadge(type) {
+    if (type === "flashed") return ' <span class="badge bg-warning text-dark">F</span>';
+    if (type === "attempted") return ' <span class="badge bg-secondary">A</span>';
+    if (type === "climbed") return ' <span class="badge bg-primary">T</span>';
+    return "";
+}
+
 function renderMemberStats(members) {
     const tbody = document.getElementById("memberStats");
     tbody.innerHTML = "";
@@ -129,11 +136,15 @@ function renderMemberStats(members) {
             status = "Absent";
         } else if (m.is_new_pr) {
             status = "NEW PR!";
+        } else if (m.is_new_flash_pr) {
+            status = "Flash PR!";
         } else if (m.climbed_at_pr) {
             status = "At PR";
         } else if (m.session_climbs > 0) {
             status = "Climbed";
         }
+
+        const sessionHighDisplay = m.session_high || "-";
 
         const row = document.createElement("tr");
         if (!m.is_present) row.classList.add("text-muted");
@@ -141,7 +152,8 @@ function renderMemberStats(members) {
             <td>${m.name}</td>
             <td>${m.pr || "-"}</td>
             <td>${m.session_climbs}</td>
-            <td>${m.session_high || "-"}</td>
+            <td>${sessionHighDisplay}</td>
+            <td>${m.points ?? "-"}</td>
             <td>${status}</td>
         `;
         tbody.appendChild(row);
@@ -199,8 +211,13 @@ function setupForm() {
         const isPlus = document.getElementById("climbPlus").checked;
         const grade = gradeNum + gradeLetter + (isPlus ? "+" : "");
         const climb_date = document.getElementById("climbDate").value;
+        const climbTypeRadio = document.querySelector('input[name="climbType"]:checked');
+        const climb_type = climbTypeRadio ? climbTypeRadio.value : "";
 
-        if (!member_id || !gradeNum) return;
+        if (!member_id || !gradeNum || !climb_type) {
+            if (!climb_type) messageDiv.innerHTML = '<span class="text-danger">Select a climb type</span>';
+            return;
+        }
 
         // Disable button to prevent double-clicks
         submitBtn.disabled = true;
@@ -211,7 +228,7 @@ function setupForm() {
             const res = await fetch("/api/climbs", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ member_id, grade, climb_date })
+                body: JSON.stringify({ member_id, grade, climb_date, climb_type })
             });
 
             if (res.ok) {
@@ -230,8 +247,9 @@ function setupForm() {
                 renderThermometer(data.bitterballen_index, data.target);
                 renderMemberStats(data.members);
                 loadRecentClimbs();
-                // Reset plus checkbox but keep member, date, grade number and letter
+                // Reset plus checkbox and type but keep member, date, grade number and letter
                 document.getElementById("climbPlus").checked = false;
+                document.querySelectorAll('input[name="climbType"]').forEach(r => r.checked = false);
             } else {
                 const err = await res.json();
                 messageDiv.innerHTML = `<span class="text-danger">${err.error}</span>`;
@@ -261,9 +279,10 @@ async function loadRecentClimbs() {
             <ul class="list-group list-group-flush">
                 ${climbs.map(c => {
                     const date = new Date(c.climb_date).toLocaleDateString();
+                    const typeBadge = climbTypeBadge(c.climb_type);
                     return `
                         <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span><strong>${c.member_name}</strong> — ${c.grade} <small class="text-muted">(${date})</small></span>
+                            <span><strong>${c.member_name}</strong> — ${c.grade}${typeBadge} <small class="text-muted">(${date})</small></span>
                             <button class="btn btn-sm btn-outline-danger delete-climb-btn" data-id="${c.id}">
                                 <i class="bi bi-trash"></i>
                             </button>
