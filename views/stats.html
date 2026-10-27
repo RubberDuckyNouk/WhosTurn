@@ -81,11 +81,31 @@
             </div>
         </div>
 
-        <!-- Top 10 average -->
-        <div id="topAvgCard" class="card mt-4 d-none">
-            <div class="card-body text-center">
-                <h5 class="card-title">Average Top 10 Grades (Last 2 Months)</h5>
-                <p id="topAvgValue" class="display-6 mb-0">—</p>
+        <!-- PRs -->
+        <div id="prCards" class="row mt-4 d-none">
+            <div class="col-sm-4">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h6 class="card-title">Climbed PR</h6>
+                        <p id="climbedPrValue" class="display-6 mb-0">—</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-sm-4">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h6 class="card-title">Flash PR</h6>
+                        <p id="flashPrValue" class="display-6 mb-0">—</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-sm-4">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h6 class="card-title">Top 10 Avg (2 mo.)</h6>
+                        <p id="topAvgValue" class="display-6 mb-0">—</p>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -93,6 +113,18 @@
         <div class="card mt-4">
             <div class="card-body">
                 <h5 class="card-title">Routes & Max Grade (Last 12 Months)</h5>
+                <div id="typeFilter" class="d-none mb-3">
+                    <div class="btn-group" role="group">
+                        <input type="checkbox" class="btn-check" id="filterAll" autocomplete="off" checked>
+                        <label class="btn btn-sm btn-outline-dark" for="filterAll">All</label>
+                        <input type="checkbox" class="btn-check" id="filterAttempted" autocomplete="off" checked>
+                        <label class="btn btn-sm btn-outline-secondary" for="filterAttempted">Attempt</label>
+                        <input type="checkbox" class="btn-check" id="filterClimbed" autocomplete="off" checked>
+                        <label class="btn btn-sm btn-outline-primary" for="filterClimbed">Top</label>
+                        <input type="checkbox" class="btn-check" id="filterFlashed" autocomplete="off" checked>
+                        <label class="btn btn-sm btn-outline-warning" for="filterFlashed">Flash</label>
+                    </div>
+                </div>
                 <p id="noDataMsg" class="text-muted d-none">No climb data for this member.</p>
                 <canvas id="statsChart"></canvas>
             </div>

@@ -114,6 +114,7 @@ async function initDatabase() {
     await pool.query(`ALTER TABLE members ADD COLUMN IF NOT EXISTS group_id INTEGER REFERENCES groups(id)`);
     await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS group_id INTEGER REFERENCES groups(id)`);
     await pool.query(`ALTER TABLE climbs ADD COLUMN IF NOT EXISTS group_id INTEGER REFERENCES groups(id)`);
+    await pool.query(`ALTER TABLE climbs ADD COLUMN IF NOT EXISTS climb_type VARCHAR(10) NOT NULL DEFAULT 'climbed'`);
 
     // Create default group if it doesn't exist, then backfill
     const defaultGroup = await pool.query(`SELECT id FROM groups WHERE name = 'Witte 6Bami'`);

@@ -564,17 +564,20 @@ app.delete("/api/sessions/:id", async (req, res) => {
 // Log a climb
 app.post("/api/climbs", async (req, res) => {
     const groupId = req.session.groupId;
-    const { member_id, grade, climb_date } = req.body;
+    const { member_id, grade, climb_date, climb_type } = req.body;
 
     const gradeValue = GRADES.indexOf(grade);
     if (!member_id || gradeValue === -1) {
         return res.status(400).json({ error: "Invalid member or grade" });
     }
 
+    const validTypes = ["attempted", "climbed", "flashed"];
+    const type = validTypes.includes(climb_type) ? climb_type : "climbed";
+
     try {
         await pool.query(
-            "INSERT INTO climbs (member_id, grade, grade_value, climb_date, group_id) VALUES ($1, $2, $3, $4, $5)",
-            [member_id, grade, gradeValue, climb_date || new Date(), groupId]
+            "INSERT INTO climbs (member_id, grade, grade_value, climb_date, group_id, climb_type) VALUES ($1, $2, $3, $4, $5, $6)",
+            [member_id, grade, gradeValue, climb_date || new Date(), groupId, type]
         );
         res.status(201).json({ message: "Climb logged" });
     } catch (err) {
@@ -638,35 +641,65 @@ app.get("/api/climbs/current", async (req, res) => {
         // and current session climbs
         const data = [];
         for (const member of members) {
-            // All-time PR (before this session)
+            // All-time PR before today (top + flash only)
             const prBefore = await pool.query(
                 `SELECT grade, grade_value FROM climbs
-                 WHERE member_id = $1 AND climb_date < $2::date
+                 WHERE member_id = $1 AND climb_date < $2::date AND climb_type != 'attempted'
                  ORDER BY grade_value DESC LIMIT 1`,
                 [member.id, todayStr]
             );
 
-            // Overall PR (including this session)
+            // Flash PR before today (only flashed climbs)
+            const flashPrBefore = await pool.query(
+                `SELECT grade, grade_value FROM climbs
+                 WHERE member_id = $1 AND climb_date < $2::date AND climb_type = 'flashed'
+                 ORDER BY grade_value DESC LIMIT 1`,
+                [member.id, todayStr]
+            );
+
+            // Overall PR (including this session, top + flash only)
             const prAll = await pool.query(
                 `SELECT grade, grade_value FROM climbs
-                 WHERE member_id = $1
+                 WHERE member_id = $1 AND climb_type != 'attempted'
                  ORDER BY grade_value DESC LIMIT 1`,
                 [member.id]
             );
 
-            // Current session climbs
-            const sessionClimbs = await pool.query(
+            // Flash PR (including this session)
+            const flashPrAll = await pool.query(
                 `SELECT grade, grade_value FROM climbs
+                 WHERE member_id = $1 AND climb_type = 'flashed'
+                 ORDER BY grade_value DESC LIMIT 1`,
+                [member.id]
+            );
+
+            // Current session climbs (all types)
+            const sessionClimbs = await pool.query(
+                `SELECT grade, grade_value, climb_type FROM climbs
                  WHERE member_id = $1 AND climb_date >= $2::date
                  ORDER BY grade_value DESC`,
                 [member.id, todayStr]
             );
 
+            // Session high for non-attempted climbs (top + flash)
+            const completedClimbs = sessionClimbs.rows.filter(c => c.climb_type !== "attempted");
+            const sessionHighCompleted = completedClimbs.length > 0 ? completedClimbs[0] : null;
+
+            // Session high flash
+            const flashClimbs = sessionClimbs.rows.filter(c => c.climb_type === "flashed");
+            const sessionHighFlash = flashClimbs.length > 0 ? flashClimbs[0] : null;
+
             const hasPrHistory = prBefore.rows.length > 0;
             const prBeforeValue = prBefore.rows[0]?.grade_value ?? -1;
-            const sessionHighValue = sessionClimbs.rows[0]?.grade_value ?? -1;
-            const isNewPr = hasPrHistory && sessionHighValue > prBeforeValue;
-            const climbedAtPr = hasPrHistory && sessionHighValue >= prBeforeValue;
+            const flashPrBeforeValue = flashPrBefore.rows[0]?.grade_value ?? -1;
+
+            const completedHighValue = sessionHighCompleted?.grade_value ?? -1;
+            const allHighValue = sessionClimbs.rows.length > 0 ? sessionClimbs.rows[0].grade_value : -1;
+            const flashHighValue = sessionHighFlash?.grade_value ?? -1;
+
+            const isNewPr = hasPrHistory && completedHighValue > prBeforeValue;
+            const isNewFlashPr = flashPrBefore.rows.length > 0 && flashHighValue > flashPrBeforeValue;
+            const climbedAtPr = hasPrHistory && completedHighValue >= prBeforeValue;
 
             // A member is present unless explicitly marked absent
             const isPresent = !absentIds.has(member.id);
@@ -675,14 +708,19 @@ app.get("/api/climbs/current", async (req, res) => {
                 id: member.id,
                 name: member.name,
                 pr: prAll.rows[0]?.grade || null,
+                flash_pr: flashPrAll.rows[0]?.grade || null,
                 session_climbs: sessionClimbs.rows.length,
-                session_high: sessionClimbs.rows[0]?.grade || null,
+                session_high: sessionHighCompleted?.grade || null,
+                session_high_type: sessionHighCompleted?.climb_type || null,
                 is_new_pr: isNewPr,
+                is_new_flash_pr: isNewFlashPr,
                 climbed_at_pr: climbedAtPr,
                 is_present: isPresent,
                 pr_before_value: prBeforeValue,
                 has_pr_history: hasPrHistory,
-                climbs: sessionClimbs.rows
+                climbs: sessionClimbs.rows,
+                completed_high_value: completedHighValue,
+                all_high_value: allHighValue,
             });
         }
 
@@ -693,6 +731,7 @@ app.get("/api/climbs/current", async (req, res) => {
         const POINTS_2_BELOW = 30;
         const POINTS_3_BELOW = 10;
         const POINTS_NO_HISTORY = 40;
+        const POINTS_ATTEMPTED_ABOVE_PR = 30;
         const PR_BONUS_1 = 50;    // 1 member beats PR
         const PR_BONUS_2 = 150;   // 2+ members beat PR
 
@@ -701,30 +740,49 @@ app.get("/api/climbs/current", async (req, res) => {
         let rawTotal = 0;
         let prCount = 0;
         for (const m of data) {
-            const sessionHigh = m.climbs.length > 0 ? m.climbs[0].grade_value : -1;
             let memberPoints = 0;
-            if (m.climbs.length === 0) {
+
+            // Check if member only has attempted climbs this session
+            const hasCompletedClimbs = m.completed_high_value >= 0;
+            const hasAnyClimbs = m.climbs.length > 0;
+
+            if (!hasAnyClimbs) {
                 memberPoints = 0;
+            } else if (!hasCompletedClimbs) {
+                // Only attempted climbs: 0 points unless attempted above PR
+                if (m.has_pr_history && m.all_high_value > m.pr_before_value) {
+                    memberPoints = POINTS_ATTEMPTED_ABOVE_PR;
+                } else {
+                    memberPoints = 0;
+                }
             } else if (!m.has_pr_history) {
                 memberPoints = POINTS_NO_HISTORY;
-            } else if (sessionHigh > m.pr_before_value) {
+            } else if (m.completed_high_value > m.pr_before_value) {
                 memberPoints = POINTS_NEW_PR;
                 prCount++;
-            } else if (sessionHigh === m.pr_before_value) {
+            } else if (m.completed_high_value === m.pr_before_value) {
                 memberPoints = POINTS_AT_PR;
-            } else if (sessionHigh === m.pr_before_value - 1) {
+            } else if (m.completed_high_value === m.pr_before_value - 1) {
                 memberPoints = POINTS_1_BELOW;
-            } else if (sessionHigh === m.pr_before_value - 2) {
+            } else if (m.completed_high_value === m.pr_before_value - 2) {
                 memberPoints = POINTS_2_BELOW;
             } else {
                 memberPoints = POINTS_3_BELOW;
             }
+
+            // Flash PR also triggers PR bonus
+            if (m.is_new_flash_pr && !m.is_new_pr) {
+                prCount++;
+            }
+
             m.points = memberPoints;
             rawTotal += memberPoints;
             // Clean up intermediate fields from response
             delete m.pr_before_value;
             delete m.has_pr_history;
             delete m.climbs;
+            delete m.all_high_value;
+            delete m.completed_high_value;
         }
 
         // Add PR bonus to raw total
@@ -756,7 +814,7 @@ app.get("/api/climbs/recent", async (req, res) => {
         }
 
         const result = await pool.query(
-            `SELECT c.id, c.grade, c.climb_date, m.name AS member_name
+            `SELECT c.id, c.grade, c.climb_date, c.climb_type, m.name AS member_name
              FROM climbs c
              JOIN members m ON c.member_id = m.id
              WHERE c.group_id = $1
@@ -804,19 +862,53 @@ app.get("/api/climbs/stats", async (req, res) => {
     try {
         const result = await pool.query(
             `SELECT to_char(climb_date, 'YYYY-MM') AS month,
+                    climb_type,
                     COUNT(*)::int AS route_count,
                     MAX(grade_value) AS max_grade_value
              FROM climbs
              WHERE member_id = $1 AND group_id = $2
                AND climb_date >= (CURRENT_DATE - INTERVAL '12 months')
-             GROUP BY to_char(climb_date, 'YYYY-MM')
-             ORDER BY month ASC`,
+             GROUP BY to_char(climb_date, 'YYYY-MM'), climb_type
+             ORDER BY month ASC, climb_type ASC`,
             [memberId, groupId]
         );
         res.json(result.rows);
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Failed to fetch climb stats" });
+    }
+});
+
+// Get per-member PR info (climbed PR and flash PR)
+app.get("/api/climbs/prs", async (req, res) => {
+    const groupId = req.session.groupId;
+    const memberId = parseInt(req.query.member_id);
+    if (!memberId) {
+        return res.status(400).json({ error: "member_id is required" });
+    }
+
+    try {
+        // Climbed PR: highest grade of climbed or flashed type
+        const climbedPr = await pool.query(
+            `SELECT grade, grade_value FROM climbs
+             WHERE member_id = $1 AND group_id = $2 AND climb_type != 'attempted'
+             ORDER BY grade_value DESC LIMIT 1`,
+            [memberId, groupId]
+        );
+        // Flash PR: highest grade of flashed type only
+        const flashPr = await pool.query(
+            `SELECT grade, grade_value FROM climbs
+             WHERE member_id = $1 AND group_id = $2 AND climb_type = 'flashed'
+             ORDER BY grade_value DESC LIMIT 1`,
+            [memberId, groupId]
+        );
+        res.json({
+            climbed_pr: climbedPr.rows[0]?.grade || null,
+            flash_pr: flashPr.rows[0]?.grade || null
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to fetch PRs" });
     }
 });
 
@@ -836,6 +928,7 @@ app.get("/api/climbs/top-average", async (req, res) => {
                  FROM climbs
                  WHERE member_id = $1 AND group_id = $2
                    AND climb_date >= (CURRENT_DATE - INTERVAL '2 months')
+                   AND climb_type != 'attempted'
                  ORDER BY grade_value DESC
                  LIMIT 10
              ) top10`,
