@@ -264,6 +264,19 @@ app.get("/api/members", async (req, res) => {
 app.get("/api/driving", async (req, res) => {
     const groupId = req.session.groupId;
     try {
+        // Bootstrap: ensure someone is current driver if carpool members exist
+        const hasDriver = await pool.query(
+            "SELECT id FROM members WHERE is_current_driver = true AND carpool = true AND group_id = $1 LIMIT 1",
+            [groupId]
+        );
+        if (hasDriver.rows.length === 0) {
+            await pool.query(
+                `UPDATE members SET is_current_driver = true
+                 WHERE id = (SELECT id FROM members WHERE carpool = true AND group_id = $1 ORDER BY drive_order LIMIT 1)`,
+                [groupId]
+            );
+        }
+
         const result = await pool.query(
             "SELECT * FROM members WHERE carpool = true AND group_id = $1 ORDER BY drive_order",
             [groupId]
@@ -326,10 +339,23 @@ app.post("/api/sessions", async (req, res) => {
                 "SELECT id FROM members WHERE carpool = true AND drive_skipped = true AND group_id = $1 LIMIT 1",
                 [groupId]
             );
-            const currentResult = await pool.query(
+            let currentResult = await pool.query(
                 "SELECT id, drive_order FROM members WHERE is_current_driver = true AND group_id = $1 LIMIT 1",
                 [groupId]
             );
+
+            // Bootstrap: if no current driver is set, assign the first carpool member
+            if (currentResult.rows.length === 0) {
+                await pool.query(
+                    `UPDATE members SET is_current_driver = true
+                     WHERE id = (SELECT id FROM members WHERE carpool = true AND group_id = $1 ORDER BY drive_order LIMIT 1)`,
+                    [groupId]
+                );
+                currentResult = await pool.query(
+                    "SELECT id, drive_order FROM members WHERE is_current_driver = true AND group_id = $1 LIMIT 1",
+                    [groupId]
+                );
+            }
 
             const suggestedId = skippedResult.rows.length > 0
                 ? skippedResult.rows[0].id
@@ -422,6 +448,36 @@ app.post("/api/sessions", async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Failed to record session" });
+    }
+});
+
+// Check if a drive or beer session exists for a given date
+app.get("/api/sessions/check", async (req, res) => {
+    const groupId = req.session.groupId;
+    const { date, type } = req.query;
+    if (!date || !type) {
+        return res.status(400).json({ error: "date and type are required" });
+    }
+
+    try {
+        let condition;
+        if (type === "drive") {
+            condition = "driver_id IS NOT NULL";
+        } else if (type === "beer") {
+            condition = "payer_id IS NOT NULL";
+        } else {
+            return res.status(400).json({ error: "type must be 'drive' or 'beer'" });
+        }
+
+        const result = await pool.query(
+            `SELECT COUNT(*)::int AS count FROM sessions
+             WHERE group_id = $1 AND session_date = $2::date AND ${condition}`,
+            [groupId, date]
+        );
+        res.json({ exists: result.rows[0].count > 0 });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to check sessions" });
     }
 });
 
@@ -952,15 +1008,19 @@ app.post("/api/members", async (req, res) => {
 
     try {
         let driveOrder = null;
+        let setAsCurrentDriver = false;
         if (carpool) {
             const maxOrder = await pool.query("SELECT COALESCE(MAX(drive_order), 0) + 1 AS next FROM members WHERE carpool = true AND group_id = $1", [groupId]);
             driveOrder = maxOrder.rows[0].next;
+            // If no one is current driver yet, this member becomes it
+            const hasDriver = await pool.query("SELECT id FROM members WHERE is_current_driver = true AND group_id = $1 LIMIT 1", [groupId]);
+            if (hasDriver.rows.length === 0) setAsCurrentDriver = true;
         }
 
         const result = await pool.query(
-            `INSERT INTO members (name, carpool, beer, bitterballen, drive_order, group_id)
-             VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-            [name.trim(), !!carpool, !!beer, !!bitterballen, driveOrder, groupId]
+            `INSERT INTO members (name, carpool, beer, bitterballen, drive_order, is_current_driver, group_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+            [name.trim(), !!carpool, !!beer, !!bitterballen, driveOrder, setAsCurrentDriver, groupId]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {

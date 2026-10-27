@@ -130,10 +130,27 @@ async function loadBeerForm() {
     }
 }
 
+// Check if a drive or beer session already exists for a given date
+async function hasExistingSession(date, type) {
+    try {
+        const res = await fetch(`/api/sessions/check?date=${date}&type=${type}`);
+        const data = await res.json();
+        return data.exists;
+    } catch {
+        return false;
+    }
+}
+
 // Record drive
 async function recordDrive() {
     const sessionDate = document.getElementById("driveDate").value;
     const driverId = parseInt(document.getElementById("driverSelect").value);
+
+    // Check for existing drive on this date
+    const existing = await hasExistingSession(sessionDate, "drive");
+    if (existing && !confirm("A drive is already recorded for this date. Record another one?")) {
+        return;
+    }
 
     try {
         const result = await fetch("/api/sessions", {
@@ -180,6 +197,12 @@ async function recordBeer() {
         return;
     }
 
+    // Check for existing beer payment on this date
+    const existing = await hasExistingSession(sessionDate, "beer");
+    if (existing && !confirm("A beer payment is already recorded for this date. Record another one?")) {
+        return;
+    }
+
     // present_ids = everyone with a beer count + the payer
     const presentIds = Object.keys(beerCounts).map(id => parseInt(id));
     if (!presentIds.includes(payerId)) {
@@ -216,6 +239,9 @@ async function recordBeer() {
 function showMessage(text, type, target) {
     const msgDiv = document.getElementById(target || "sessionMessage");
     msgDiv.innerHTML = `<span class="text-${type}">${text}</span>`;
+    if (type === "success") {
+        setTimeout(() => { msgDiv.innerHTML = ""; }, 3000);
+    }
 }
 
 // Current history filter
