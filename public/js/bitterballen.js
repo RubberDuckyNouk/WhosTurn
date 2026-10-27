@@ -33,6 +33,26 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
 
+    document.getElementById("recalcBtn").addEventListener("click", async () => {
+        // Collect unchecked member IDs as absent
+        const absent = [];
+        document.querySelectorAll("#attendanceList input[type=checkbox]").forEach(cb => {
+            if (!cb.checked) absent.push(parseInt(cb.value));
+        });
+        const modal = bootstrap.Modal.getInstance(document.getElementById("attendanceModal"));
+        if (modal) modal.hide();
+        try {
+            await fetch("/api/attendance", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ absent })
+            });
+        } catch (err) {
+            console.error("Failed to save attendance:", err);
+        }
+        loadClimbData();
+    });
+
     document.getElementById("orderBtn").addEventListener("click", orderBitterballen);
     document.getElementById("orderModal").addEventListener("show.bs.modal", () => {
         loadOrderForm();
@@ -47,6 +67,7 @@ async function loadClimbData() {
 
         renderThermometer(data.bitterballen_index, data.target);
         renderMemberStats(data.members);
+        renderAttendanceCheckboxes(data.members);
     } catch (err) {
         console.error("Failed to load climb data:", err);
         showConnectionError();
@@ -104,7 +125,9 @@ function renderMemberStats(members) {
 
     for (const m of members) {
         let status = "-";
-        if (m.is_new_pr) {
+        if (!m.is_present) {
+            status = "Absent";
+        } else if (m.is_new_pr) {
             status = "NEW PR!";
         } else if (m.climbed_at_pr) {
             status = "At PR";
@@ -113,6 +136,7 @@ function renderMemberStats(members) {
         }
 
         const row = document.createElement("tr");
+        if (!m.is_present) row.classList.add("text-muted");
         row.innerHTML = `
             <td>${m.name}</td>
             <td>${m.pr || "-"}</td>
@@ -122,6 +146,20 @@ function renderMemberStats(members) {
         `;
         tbody.appendChild(row);
     }
+}
+
+function renderAttendanceCheckboxes(members) {
+    const container = document.getElementById("attendanceList");
+    container.innerHTML = members.map(m => `
+        <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" value="${m.id}" id="att-${m.id}"
+                   ${m.is_present ? "checked" : ""}>
+            <label class="form-check-label" for="att-${m.id}">${m.name}</label>
+        </div>
+    `).join("");
+
+    document.getElementById("presentCount").textContent =
+        members.filter(m => m.is_present).length;
 }
 
 async function loadDropdowns() {

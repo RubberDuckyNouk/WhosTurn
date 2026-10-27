@@ -62,6 +62,16 @@ async function initDatabase() {
         )
     `);
 
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS session_absent (
+            id SERIAL PRIMARY KEY,
+            session_date DATE NOT NULL,
+            member_id INTEGER NOT NULL REFERENCES members(id),
+            group_id INTEGER NOT NULL REFERENCES groups(id),
+            UNIQUE(session_date, member_id, group_id)
+        )
+    `);
+
     // --- Migration: replace pay_group with boolean flags, keep driving rotation ---
 
     // Add new columns (safe on fresh DBs — IF NOT EXISTS)

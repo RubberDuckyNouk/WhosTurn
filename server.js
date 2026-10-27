@@ -583,6 +583,39 @@ app.post("/api/climbs", async (req, res) => {
     }
 });
 
+// Update attendance (absent members) for today
+app.put("/api/attendance", async (req, res) => {
+    const groupId = req.session.groupId;
+    const { absent } = req.body;
+
+    if (!Array.isArray(absent)) {
+        return res.status(400).json({ error: "absent must be an array of member IDs" });
+    }
+
+    const todayStr = new Date().toISOString().split("T")[0];
+
+    try {
+        // Remove existing absent records for today + group
+        await pool.query(
+            "DELETE FROM session_absent WHERE session_date = $1::date AND group_id = $2",
+            [todayStr, groupId]
+        );
+
+        // Insert new absent records
+        for (const memberId of absent) {
+            await pool.query(
+                "INSERT INTO session_absent (session_date, member_id, group_id) VALUES ($1::date, $2, $3)",
+                [todayStr, memberId, groupId]
+            );
+        }
+
+        res.json({ ok: true });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to update attendance" });
+    }
+});
+
 // Get current session climbs and PRs
 app.get("/api/climbs/current", async (req, res) => {
     try {
@@ -594,17 +627,12 @@ app.get("/api/climbs/current", async (req, res) => {
         const membersResult = await pool.query("SELECT id, name FROM members WHERE bitterballen = true AND group_id = $1 ORDER BY name", [req.session.groupId]);
         const members = membersResult.rows;
 
-        // Check which members were present at a beer session today
-        const beerAttendance = await pool.query(
-            `SELECT DISTINCT sa.member_id
-             FROM session_attendance sa
-             JOIN sessions s ON sa.session_id = s.id
-             WHERE s.payer_id IS NOT NULL
-               AND s.session_date >= $1
-               AND s.group_id = $2`,
+        // Load absent members from session_absent table
+        const absentResult = await pool.query(
+            "SELECT member_id FROM session_absent WHERE session_date = $1::date AND group_id = $2",
             [todayStr, req.session.groupId]
         );
-        const presentAtBeer = new Set(beerAttendance.rows.map(r => r.member_id));
+        const absentIds = new Set(absentResult.rows.map(r => r.member_id));
 
         // Get PRs for each member (all-time highest grade BEFORE this session)
         // and current session climbs
@@ -640,8 +668,8 @@ app.get("/api/climbs/current", async (req, res) => {
             const isNewPr = hasPrHistory && sessionHighValue > prBeforeValue;
             const climbedAtPr = hasPrHistory && sessionHighValue >= prBeforeValue;
 
-            // A member is "present" if they have climbs or were in a beer session
-            const isPresent = sessionClimbs.rows.length > 0 || presentAtBeer.has(member.id);
+            // A member is present unless explicitly marked absent
+            const isPresent = !absentIds.has(member.id);
 
             data.push({
                 id: member.id,
